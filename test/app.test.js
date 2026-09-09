@@ -145,7 +145,7 @@ test('new activity spots persist their topic and send HTML with antenna link',as
     assert.equal(result.status,201);await Promise.all(pending);
     const spot=await DB.prepare('SELECT * FROM spots WHERE id=?').bind(id).first();
     assert.equal(spot.topic_id,topicFor(activity,env));assert.equal(sent[i].message_thread_id,spot.topic_id);assert.ok(sent[i].rich_message.html.includes('<table'));
-    assert.ok(sent[i].reply_markup.inline_keyboard[0][0].url.endsWith('startapp=bearing_JN35TA'));
+    assert.ok(sent[i].reply_markup.inline_keyboard[0][0].url.endsWith(`startapp=bearing_${id}`));
   }
 });
 test('authenticated create/list, idempotency, ownership, QRT and Telegram sync',async t=>{

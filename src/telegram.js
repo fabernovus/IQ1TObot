@@ -53,7 +53,7 @@ export async function syncSpot(env, id) {
       chat_id: env.TELEGRAM_GROUP_ID,
       ...(spot.message_id ? { message_id: spot.message_id } : { message_thread_id: spot.topic_id ?? topicFor(spot.activity,env) }),
       rich_message:{html:spotMessage(spot,logs.results),skip_entity_detection:true},
-      reply_markup:{inline_keyboard:[...(spot.ended_at || !spot.frequency_hz ? [] : [[{text:'🧭 Direzione antenna',url:`https://t.me/IQ1TObot?startapp=bearing_${spot.locator}`}]]),[{text:spot.ended_at?'📒 QSL Log':'📒 QSL Log · Conferma QSO',url:`https://t.me/IQ1TObot?startapp=qsl_${spot.id}`}]]}
+      reply_markup:{inline_keyboard:[...(spot.ended_at || !spot.frequency_hz ? [] : [[{text:'🧭 Direzione antenna',url:`https://t.me/IQ1TObot?startapp=bearing_${spot.id}`}]]),[{text:spot.ended_at?'📒 QSL Log':'📒 QSL Log · Conferma QSO',url:`https://t.me/IQ1TObot?startapp=qsl_${spot.id}`}]]}
     });
     // A QRT may have happened while sendMessage was in flight: preserve its pending edit.
     await env.DB.prepare(`UPDATE spots SET message_id=COALESCE(message_id,?),

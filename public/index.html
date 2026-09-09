@@ -14,7 +14,7 @@
 <main>
   <header><div><span class="eyebrow">IQ1TO</span><h1 id="cq-title" tabindex="0" title="Tocca 5 volte per aggiornare la cache">CQ Spot<span class="signal" aria-hidden="true"> ◉</span></h1></div><a href="https://t.me/IQ1TO">Gruppo ↗</a></header>
   <p id="status" role="status" aria-live="polite">Connessione a Telegram…</p>
-  <nav class="tabs" role="tablist" aria-label="CQ Spot">
+  <nav id="main-tabs" class="tabs" role="tablist" aria-label="CQ Spot">
     <button id="tab-list" type="button" role="tab" aria-selected="true" aria-controls="panel-list">QSO attivi</button>
     <button id="tab-create" type="button" role="tab" aria-selected="false" aria-controls="panel-create" tabindex="-1">Genera SPOT</button>
   </nav>
@@ -58,16 +58,16 @@
   </section>
   </div>
   <div id="panel-list" role="tabpanel" aria-labelledby="tab-list">
-  <section id="bearing-panel" class="panel" hidden aria-labelledby="bearing-title"><h2 id="bearing-title">Direzione antenna</h2><p id="bearing-target"></p>
+  <section id="bearing-panel" class="panel detail-panel" hidden aria-labelledby="bearing-title"><div class="section-head"><button id="bearing-back" type="button" class="text-button">← Indietro</button><button id="bearing-qsl" type="button" class="text-button">📒 Registra QSL</button></div><h2 id="bearing-title">Direzione antenna</h2><p id="bearing-target"></p>
     <div class="inline-field"><label>Il tuo locator<input id="bearing-origin" maxlength="6" autocapitalize="characters" placeholder="JN35UC"></label><button id="bearing-gps" type="button" class="secondary">Usa posizione</button></div><p id="bearing-gps-status" class="local-status" role="status"></p>
     <button id="bearing-calculate" type="button">Calcola direzione</button><p id="bearing-result" role="status"></p>
     <div id="bearing-visuals" hidden>
-      <section class="compass-card" aria-labelledby="compass-title"><div class="section-head"><h3 id="compass-title">Bussola</h3><strong id="compass-bearing">—°</strong></div><div id="compass-dial" class="compass-dial" aria-hidden="true"><span class="north">N</span><span class="east">E</span><span class="south">S</span><span class="west">O</span><i class="compass-arrow"></i><b class="compass-centre"></b></div><button id="compass-enable" type="button" class="secondary">Attiva bussola</button><p id="compass-status" class="hint" role="status">Attiva il sensore e orienta la parte alta del telefono verso la freccia.</p></section>
+      <section class="compass-card" aria-labelledby="compass-title"><div class="section-head"><h3 id="compass-title">Bussola</h3><strong id="compass-bearing">—°</strong></div><div id="compass-dial" class="compass-dial" aria-hidden="true"><span class="north">N</span><span class="east">E</span><span class="south">S</span><span class="west">O</span><span id="compass-target-mark" class="compass-target-mark">—°</span><i class="compass-arrow"></i><b class="compass-centre"></b></div><button id="compass-enable" type="button" class="secondary">Attiva bussola</button><p id="compass-status" class="hint" role="status">Attiva il sensore e orienta la parte alta del telefono verso la freccia.</p></section>
       <section class="bearing-map-card" aria-labelledby="map-title"><h3 id="map-title">Mappa del collegamento</h3><div class="bearing-map-wrap"><iframe id="bearing-map" title="Mappa tra i due locator" loading="lazy" referrerpolicy="no-referrer"></iframe><span id="map-own" class="map-pin own" title="La tua posizione"></span><span id="map-target" class="map-pin target" title="Stazione remota"></span></div><div class="map-legend"><span><i class="legend-own"></i>Tu</span><span><i class="legend-target"></i>Stazione remota</span></div><p class="hint">La tua posizione usa il GPS quando acquisito; la stazione remota è indicata al centro del suo locator. La mappa richiede connessione.</p></section>
     </div>
     <p class="hint">Azimut dal nord geografico, percorso corto tra i centri dei locator. 0° N · 90° E · 180° S · 270° O.</p>
   </section>
-  <section id="qsl-panel" class="panel" hidden aria-labelledby="qsl-title"><div class="section-head"><h2 id="qsl-title">QSL Log</h2><button id="qsl-close" type="button" class="text-button">Chiudi</button></div>
+  <section id="qsl-panel" class="panel detail-panel" hidden aria-labelledby="qsl-title"><div class="section-head"><button id="qsl-close" type="button" class="text-button">← Indietro</button><h2 id="qsl-title">QSL Log</h2></div>
     <p id="qsl-target"></p><p id="qsl-status" role="status"></p>
     <form id="qsl-form" hidden><fieldset id="qsl-fields" disabled>
       <label>Il tuo nominativo<input id="qsl-callsign" required maxlength="20" autocapitalize="characters" spellcheck="false"></label>
@@ -80,10 +80,8 @@
     <div class="table-scroll"><table class="qsl-table"><caption id="qsl-total">Collegamenti confermati</caption><thead><tr><th>UTC</th><th>Nominativo</th><th>Locator</th><th>km*</th><th>RS/RST</th><th></th></tr></thead><tbody id="qsl-rows"></tbody></table></div>
     <p class="hint">* Distanza tra LOC.</p><button id="qsl-more" class="secondary" type="button" hidden>Carica precedenti</button>
   </section>
-  <section id="my-spot" class="panel" hidden aria-labelledby="my-title"><h2 id="my-title">I tuoi SPOT</h2><div id="my-details"></div></section>
-  <section aria-labelledby="spots-title"><div class="section-head"><h2 id="spots-title">In radio <span id="count" class="count">0</span></h2><button id="refresh" class="text-button" disabled>Aggiorna ↻</button></div><p id="updated" class="hint">SPOT attivi del gruppo</p><div id="spots"><p class="empty">Gli SPOT appariranno qui dopo l’accesso.</p></div></section>
+  <section id="spots-section" aria-labelledby="spots-title"><div class="section-head"><h2 id="spots-title">In radio <span id="count" class="count">0</span></h2><button id="refresh" class="text-button" disabled>Aggiorna ↻</button></div><p id="updated" class="hint">SPOT attivi del gruppo</p><div id="spots"><p class="empty">Gli SPOT appariranno qui dopo l’accesso.</p></div></section>
   </div>
-  <details id="offline-locator" class="panel"><summary>Calcola il mio locator (anche offline)</summary><p class="hint">Inserisci le coordinate: il locator viene aggiornato automaticamente.</p><div class="row"><label>Latitudine<input id="offline-lat" inputmode="decimal" placeholder="45.0703"></label><label>Longitudine<input id="offline-lon" inputmode="decimal" placeholder="7.6869"></label></div><button id="offline-gps" type="button" class="secondary offline-gps">Determina da GPS</button><div id="offline-result" class="offline-result" role="status" aria-live="polite"><span class="offline-result-label">Locator</span><strong>—</strong></div></details>
   <footer>73 de IQ1TO · CQ Spot</footer>
 </main>
 </body>

@@ -5,7 +5,7 @@ const $ = id => document.getElementById(id);
 const tg = window.Telegram?.WebApp;
 const initData = tg?.initData;
 if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js').catch(()=>{});
-let mine = null, busy = false, loading = false, authenticated = false, profileLoaded = false, activity = '', bearingTarget = '', bearingPosition = null, bearingAngle = null, deviceHeading = null, compassListening = false, bearingMapKey = '';
+let mine = null, busy = false, loading = false, authenticated = false, profileLoaded = false, activity = '', bearingTarget = '', bearingSpotId = '', bearingPosition = null, bearingAngle = null, deviceHeading = null, compassRotation = null, compassListening = false, bearingMapKey = '', selectedTab = 'list', detailView = '';
 let requestId = crypto.randomUUID();
 let mineActive=[],qslTarget=null,qslNext=null,qslSequence=0,qslExpanded=false;
 const status = (text,error=false) => { $('status').textContent=text; $('status').classList.toggle('error',error); };
@@ -42,6 +42,7 @@ function dmrChoice() {
 }
 $('mode').addEventListener('change',dmrChoice);$('dmr-type').addEventListener('change',dmrChoice);dmrChoice();
 function selectTab(name,focus=false) {
+  selectedTab=name;detailView='';$('main-tabs').hidden=false;$('spots-section').hidden=false;$('bearing-panel').hidden=true;$('qsl-panel').hidden=true;tg?.BackButton?.hide?.();
   for(const tab of ['list','create']) {
     const active=tab===name;
     $(`tab-${tab}`).setAttribute('aria-selected',String(active));$(`tab-${tab}`).tabIndex=active?0:-1;
@@ -50,6 +51,18 @@ function selectTab(name,focus=false) {
   if(name==='create')requestAnimationFrame(()=>bandWheel.reveal());
   if(focus)$(`tab-${name}`).focus();
 }
+function renderDetail(name) {
+  if(detailView==='qsl' && name!=='qsl'){qslSequence++;qslTarget=null;}
+  detailView=name;$('main-tabs').hidden=!!name;$('panel-create').hidden=!!name || selectedTab!=='create';$('panel-list').hidden=!name && selectedTab!=='list';
+  $('spots-section').hidden=!!name;$('bearing-panel').hidden=name!=='bearing';$('qsl-panel').hidden=name!=='qsl';
+  if(name)tg?.BackButton?.show?.();else tg?.BackButton?.hide?.();
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function openDetail(name,push=true) {renderDetail(name);if(push && history.state?.cqDetail!==name)history.pushState({cqDetail:name},'');}
+function detailBack() {if(history.state?.cqDetail)history.back();else renderDetail('');}
+history.replaceState({...history.state,cqDetail:''},'');
+window.addEventListener('popstate',event=>renderDetail(event.state?.cqDetail || ''));
+tg?.BackButton?.onClick?.(detailBack);
 for(const tab of ['list','create']) {
   $(`tab-${tab}`).addEventListener('click',()=>selectTab(tab));
   $(`tab-${tab}`).addEventListener('keydown',event=>{
@@ -88,7 +101,7 @@ async function api(path,method='GET',payload) {
   return data;
 }
 function card(spot,own=false) {
-  const el=document.createElement('article');el.className='spot';
+  const el=document.createElement('article');el.className=own?'spot own-spot':'spot';
   const top=document.createElement('div');top.className='spot-top';
   const call=document.createElement('span');call.className='callsign';call.textContent=spot.callsign;
   const bm=spot.mode==='DMR' && spot.dmr_type==='bm';
@@ -100,7 +113,7 @@ function card(spot,own=false) {
   el.append(top,freq,meta);
   if(spot.activity) {const tag=document.createElement('p');tag.className='hint';tag.textContent=`${spot.activity} · ${spot.activity_name}`;el.append(tag);}
   if(spot.notes){const note=document.createElement('p');note.className='spot-notes';note.textContent=spot.notes;el.append(note);}
-  if(!own && spot.frequency_hz>0) {const button=document.createElement('button');button.type='button';button.className='text-button';button.textContent='🧭 Direzione antenna';button.addEventListener('click',()=>showBearing(spot.locator,spot.callsign));el.append(button);}
+  if(!own && spot.frequency_hz>0) {const button=document.createElement('button');button.type='button';button.className='text-button';button.textContent='🧭 Direzione antenna';button.addEventListener('click',()=>showBearing(spot.locator,spot.callsign,spot.id));el.append(button);}
   const logButton=document.createElement('button');logButton.type='button';logButton.className='text-button';logButton.textContent=`📒 QSL Log (${spot.qsl_count || 0})${own?'':' · Conferma QSO'}`;
   logButton.addEventListener('click',()=>openQSL(spot.id));el.append(logButton);
   if(own){const qrt=document.createElement('button');qrt.type='button';qrt.className='danger';qrt.dataset.qrt=spot.id;qrt.textContent='QRT · Termina questo SPOT';qrt.addEventListener('click',()=>endSpot(spot.id));el.append(qrt);const remove=document.createElement('button');remove.type='button';remove.className='danger text-button';remove.textContent='Elimina SPOT e messaggio';remove.addEventListener('click',()=>deleteSpot(spot.id));el.append(remove);}
@@ -145,11 +158,11 @@ async function loadQSL(id,append=false,initialize=false) {
   } catch(error){if(sequence===qslSequence)$('qsl-status').textContent=error.message;}
 }
 function openQSL(id) {
-  selectTab('list');qslTarget=null;qslNext=null;qslExpanded=false;
-  $('qsl-panel').hidden=false;$('qsl-form').hidden=true;$('qsl-more').hidden=true;$('qsl-rows').replaceChildren();$('qsl-target').textContent='';$('qsl-status').textContent='Caricamento QSL Log…';
-  $('qsl-panel').scrollIntoView({behavior:'smooth',block:'start'});loadQSL(id,false,true);
+  qslTarget=null;qslNext=null;qslExpanded=false;openDetail('qsl');
+  $('qsl-form').hidden=true;$('qsl-more').hidden=true;$('qsl-rows').replaceChildren();$('qsl-target').textContent='';$('qsl-status').textContent='Caricamento QSL Log…';
+  loadQSL(id,false,true);
 }
-$('qsl-close').addEventListener('click',()=>{qslSequence++;qslTarget=null;$('qsl-panel').hidden=true;});
+$('qsl-close').addEventListener('click',detailBack);
 $('qsl-more').addEventListener('click',()=>{if(qslTarget && qslNext){qslExpanded=true;loadQSL(qslTarget.id,true);}});
 $('qsl-form').addEventListener('submit',async event=>{
   event.preventDefault();if(busy || !qslTarget)return;busy=true;locks();
@@ -178,8 +191,12 @@ function updateCompass() {
   if(bearingAngle===null){$('compass-bearing').textContent='—';$('compass-dial').classList.add('unavailable');$('compass-status').textContent='I due locator coincidono: non c’è una direzione utile.';return;}
   $('compass-dial').classList.remove('unavailable');
   const relative=(bearingAngle-(deviceHeading ?? 0)+360)%360;
-  $('compass-dial').style.setProperty('--target-angle',`${relative}deg`);
-  $('compass-bearing').textContent=`${Math.round(bearingAngle)%360}°`;
+  if(compassRotation===null)compassRotation=relative;
+  else compassRotation+=((relative-(compassRotation%360)+540)%360)-180;
+  $('compass-dial').style.setProperty('--target-angle',`${compassRotation}deg`);
+  const degrees=Math.round(bearingAngle)%360,rad=relative*Math.PI/180;
+  $('compass-bearing').textContent=`${degrees}°`;$('compass-target-mark').textContent=`${degrees}°`;
+  $('compass-target-mark').style.left=`${50+42*Math.sin(rad)}%`;$('compass-target-mark').style.top=`${50-42*Math.cos(rad)}%`;
   if(deviceHeading!==null)$('compass-status').textContent=`Telefono a ${Math.round(deviceHeading)}° · ruotalo finché la freccia punta in alto.`;
 }
 function mercator(latitude) {const value=Math.max(-85,Math.min(85,latitude))*Math.PI/180;return Math.log(Math.tan(Math.PI/4+value/2));}
@@ -197,7 +214,10 @@ function orientationChanged(event) {
   let heading=null;
   if(Number.isFinite(event.webkitCompassHeading))heading=event.webkitCompassHeading;
   else if(Number.isFinite(event.alpha)){const screenAngle=screen.orientation?.angle || window.orientation || 0;heading=(360-event.alpha+screenAngle+360)%360;}
-  if(heading===null)return;deviceHeading=heading;updateCompass();
+  if(heading===null)return;
+  if(deviceHeading===null)deviceHeading=heading;
+  else {const delta=((heading-deviceHeading+540)%360)-180;if(Math.abs(delta)<.6)return;deviceHeading=(deviceHeading+delta*.22+360)%360;}
+  updateCompass();
 }
 async function enableCompass() {
   try {
@@ -208,17 +228,18 @@ async function enableCompass() {
     $('compass-enable').hidden=true;$('compass-status').textContent='Muovi il telefono a forma di 8 per calibrare la bussola.';
   } catch(error) {$('compass-status').textContent=error.message;}
 }
-function showBearing(target,callsign='') {
-  selectTab('list');
-  bearingTarget=target;bearingPosition=null;$('bearing-panel').hidden=false;
+function showBearing(target,callsign='',spotId='') {
+  bearingTarget=target;bearingSpotId=spotId;bearingPosition=null;compassRotation=null;$('bearing-qsl').hidden=!spotId;openDetail('bearing');
   $('bearing-target').textContent=`Verso ${callsign ? callsign+' · ' : ''}${target}`;
   $('bearing-origin').value=$('locator').value || mine?.locator || $('profile-locator').value;
-  calculateBearing();$('bearing-panel').scrollIntoView({behavior:'smooth',block:'center'});
+  calculateBearing();
 }
 $('bearing-gps').addEventListener('click',async()=>{const fix=await applyGPS('bearing-origin',null,'bearing-gps-status');if(fix){bearingPosition=fix;calculateBearing();}});
 $('bearing-calculate').addEventListener('click',calculateBearing);
 $('bearing-origin').addEventListener('input',()=>{bearingPosition=null;calculateBearing();});
 $('compass-enable').addEventListener('click',enableCompass);
+$('bearing-back').addEventListener('click',detailBack);
+$('bearing-qsl').addEventListener('click',()=>{if(bearingSpotId)openQSL(bearingSpotId);});
 $('profile-form').addEventListener('submit',async event=>{
   event.preventDefault();if(busy)return;busy=true;locks();
   try {
@@ -244,14 +265,14 @@ async function refresh(quiet=false) {
       if(mine && !mine.ended_at) {$('callsign').value=mine.callsign;$('locator').value=mine.locator;}
       profileLoaded=true;
       const start=tg?.initDataUnsafe?.start_param || new URLSearchParams(location.search).get('tgWebAppStartParam') || '';
-      if(/^bearing_[A-R]{2}[0-9]{2}[A-X]{2}$/.test(start)) showBearing(start.slice(8));
+      if(/^bearing_[0-9a-f-]{36}$/i.test(start)){const spot=data.spots.find(item=>item.id===start.slice(8));if(spot)showBearing(spot.locator,spot.callsign,spot.id);}
+      else if(/^bearing_[A-R]{2}[0-9]{2}[A-X]{2}$/.test(start)){const spot=data.spots.find(item=>item.locator===start.slice(8));showBearing(start.slice(8),spot?.callsign || '',spot?.id || '');}
       else if(/^qsl_[0-9a-f-]{36}$/i.test(start))openQSL(start.slice(4));
     }
     const active=mineActive.length>0;
-    $('composer').hidden=mineActive.length>=3; $('my-spot').hidden=!active;
+    $('composer').hidden=mineActive.length>=3;
     $('already-active').hidden=mineActive.length<3;
     $('spot-slots').textContent=`${mineActive.length}/3 SPOT attivi`;
-    $('my-details').replaceChildren(...mineActive.map(spot=>card(spot,true)));
     $('spots').replaceChildren(...data.spots.map(s=>card(s,!!s.is_owner)));
     if(!data.spots.length) { const p=document.createElement('p');p.className='empty';p.textContent='Nessuno SPOT attivo. Ci sentiamo in radio?';$('spots').append(p); }
     $('count').textContent=data.spots.length===200 ? '200+' : data.spots.length;
@@ -282,20 +303,6 @@ async function position() {
   if(browserFix)return browserFix;
   throw new Error('Posizione precisa non disponibile. Abilita il GPS e la posizione precisa per Telegram, poi riprova all’aperto.');
 }
-function offlineLocator() {
-  try {
-    const latitude=Number($('offline-lat').value.replace(',','.')),longitude=Number($('offline-lon').value.replace(',','.'));
-    if(!$('offline-lat').value.trim() || !$('offline-lon').value.trim()){ $('offline-result').classList.remove('error');$('offline-result').querySelector('strong').textContent='Inserisci latitudine e longitudine';return; }
-    const result=locatorFromGPS(latitude,longitude);$('offline-result').classList.remove('error');$('offline-result').querySelector('strong').textContent=result;
-  } catch(error) {$('offline-result').classList.add('error');$('offline-result').querySelector('strong').textContent=error.message;}
-}
-$('offline-lat').addEventListener('input',offlineLocator);$('offline-lon').addEventListener('input',offlineLocator);
-$('offline-gps').addEventListener('click',async()=>{
-  $('offline-result').classList.remove('error');$('offline-result').classList.add('loading');$('offline-result').querySelector('strong').textContent='Acquisizione GPS…';
-  try {const p=await position();$('offline-lat').value=p.latitude.toFixed(6);$('offline-lon').value=p.longitude.toFixed(6);offlineLocator();}
-  catch(error){$('offline-result').classList.remove('loading');$('offline-result').classList.add('error');$('offline-result').querySelector('strong').textContent=error.message;}
-  finally {$('offline-result').classList.remove('loading');}
-});
 $('gps').addEventListener('click',async()=>{
   busy=true;locks();localStatus('gps-quality','Acquisizione della posizione…');
   try {
