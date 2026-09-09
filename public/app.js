@@ -242,14 +242,16 @@ async function position() {
 function offlineLocator() {
   try {
     const latitude=Number($('offline-lat').value.replace(',','.')),longitude=Number($('offline-lon').value.replace(',','.'));
-    const result=locatorFromGPS(latitude,longitude);$('offline-result').textContent=result;
-  } catch(error) {$('offline-result').textContent=error.message;}
+    if(!$('offline-lat').value.trim() || !$('offline-lon').value.trim()){ $('offline-result').classList.remove('error');$('offline-result').querySelector('strong').textContent='Inserisci latitudine e longitudine';return; }
+    const result=locatorFromGPS(latitude,longitude);$('offline-result').classList.remove('error');$('offline-result').querySelector('strong').textContent=result;
+  } catch(error) {$('offline-result').classList.add('error');$('offline-result').querySelector('strong').textContent=error.message;}
 }
-$('offline-calc').addEventListener('click',offlineLocator);
+$('offline-lat').addEventListener('input',offlineLocator);$('offline-lon').addEventListener('input',offlineLocator);
 $('offline-gps').addEventListener('click',async()=>{
-  $('offline-result').textContent='Acquisizione della posizione…';
+  $('offline-result').classList.remove('error');$('offline-result').classList.add('loading');$('offline-result').querySelector('strong').textContent='Acquisizione GPS…';
   try {const p=await position();$('offline-lat').value=p.latitude.toFixed(6);$('offline-lon').value=p.longitude.toFixed(6);offlineLocator();}
-  catch(error){$('offline-result').textContent=error.message;}
+  catch(error){$('offline-result').classList.remove('loading');$('offline-result').classList.add('error');$('offline-result').querySelector('strong').textContent=error.message;}
+  finally {$('offline-result').classList.remove('loading');}
 });
 $('gps').addEventListener('click',async()=>{
   busy=true;locks();localStatus('gps-quality','Acquisizione della posizione…');
