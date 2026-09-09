@@ -5,7 +5,7 @@ const $ = id => document.getElementById(id);
 const tg = window.Telegram?.WebApp;
 const initData = tg?.initData;
 if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js').catch(()=>{});
-let mine = null, busy = false, loading = false, authenticated = false, profileLoaded = false, activity = '', bearingTarget = '', bearingSpotId = '', bearingPosition = null, bearingAngle = null, deviceHeading = null, compassRotation = null, compassListening = false, bearingMapKey = '', selectedTab = 'list', detailView = '';
+let mine = null, busy = false, loading = false, authenticated = false, profileLoaded = false, activity = '', bearingTarget = '', bearingSpotId = '', bearingAngle = null, deviceHeading = null, compassRotation = null, compassListening = false, selectedTab = 'list', detailView = '';
 let requestId = crypto.randomUUID();
 let mineActive=[],qslTarget=null,qslNext=null,qslSequence=0,qslExpanded=false;
 const status = (text,error=false) => { $('status').textContent=text; $('status').classList.toggle('error',error); };
@@ -190,26 +190,16 @@ function calculateBearing() {
 function updateCompass() {
   if(bearingAngle===null){$('compass-bearing').textContent='—';$('compass-dial').classList.add('unavailable');$('compass-status').textContent='I due locator coincidono: non c’è una direzione utile.';return;}
   $('compass-dial').classList.remove('unavailable');
-  const relative=(bearingAngle-(deviceHeading ?? 0)+360)%360;
-  if(compassRotation===null)compassRotation=relative;
-  else compassRotation+=((relative-(compassRotation%360)+540)%360)-180;
-  $('compass-dial').style.setProperty('--target-angle',`${compassRotation}deg`);
-  const degrees=Math.round(bearingAngle)%360,rad=relative*Math.PI/180;
+  const heading=deviceHeading ?? 0,desired=-heading;
+  if(compassRotation===null)compassRotation=desired;
+  else compassRotation+=((desired-(compassRotation%360)+540)%360)-180;
+  $('compass-rose').style.transform=`rotate(${compassRotation}deg)`;
+  const degrees=Math.round(bearingAngle)%360,rad=bearingAngle*Math.PI/180;
   $('compass-bearing').textContent=`${degrees}°`;$('compass-target-mark').textContent=`${degrees}°`;
   $('compass-target-mark').style.left=`${50+42*Math.sin(rad)}%`;$('compass-target-mark').style.top=`${50-42*Math.cos(rad)}%`;
-  if(deviceHeading!==null)$('compass-status').textContent=`Telefono a ${Math.round(deviceHeading)}° · ruotalo finché la freccia punta in alto.`;
+  if(deviceHeading!==null)$('compass-status').textContent=`Direzione telefono ${Math.round(deviceHeading)}° · porta il marker ${degrees}° sulla punta dell’ago.`;
 }
-function mercator(latitude) {const value=Math.max(-85,Math.min(85,latitude))*Math.PI/180;return Math.log(Math.tan(Math.PI/4+value/2));}
-function updateBearingMap(origin) {
-  const own=bearingPosition || locatorCenter(origin),target=locatorCenter(bearingTarget);
-  let west=Math.min(own.longitude,target.longitude),east=Math.max(own.longitude,target.longitude),south=Math.min(own.latitude,target.latitude),north=Math.max(own.latitude,target.latitude);
-  const lonPad=Math.max(.08,(east-west)*.22),latPad=Math.max(.05,(north-south)*.22);west=Math.max(-180,west-lonPad);east=Math.min(180,east+lonPad);south=Math.max(-85,south-latPad);north=Math.min(85,north+latPad);
-  const key=[west,south,east,north].map(value=>value.toFixed(5)).join(',');
-  if(key!==bearingMapKey){bearingMapKey=key;$('bearing-map').src=`https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(key)}&layer=mapnik`;}
-  const place=(id,point)=>{const x=(point.longitude-west)/(east-west)*100,y=(mercator(north)-mercator(point.latitude))/(mercator(north)-mercator(south))*100;$(id).style.left=`${Math.max(2,Math.min(98,x))}%`;$(id).style.top=`${Math.max(2,Math.min(94,y))}%`;};
-  place('map-own',own);place('map-target',target);
-}
-function updateBearingVisuals(origin) {$('bearing-visuals').hidden=false;updateCompass();updateBearingMap(origin);}
+function updateBearingVisuals() {$('bearing-visuals').hidden=false;updateCompass();}
 function orientationChanged(event) {
   let heading=null;
   if(Number.isFinite(event.webkitCompassHeading))heading=event.webkitCompassHeading;
@@ -229,14 +219,16 @@ async function enableCompass() {
   } catch(error) {$('compass-status').textContent=error.message;}
 }
 function showBearing(target,callsign='',spotId='') {
-  bearingTarget=target;bearingSpotId=spotId;bearingPosition=null;compassRotation=null;$('bearing-qsl').hidden=!spotId;openDetail('bearing');
+  bearingTarget=target;bearingSpotId=spotId;compassRotation=null;$('bearing-qsl').hidden=!spotId;openDetail('bearing');
   $('bearing-target').textContent=`Verso ${callsign ? callsign+' · ' : ''}${target}`;
   $('bearing-origin').value=$('locator').value || mine?.locator || $('profile-locator').value;
+  const point=locatorCenter(target),label=encodeURIComponent(`${callsign || target} · ${target}`),coordinates=`${point.latitude.toFixed(6)},${point.longitude.toFixed(6)}`;
+  $('bearing-maps').href=/iPad|iPhone|iPod/.test(navigator.userAgent)?`https://maps.apple.com/?ll=${coordinates}&q=${label}`:`https://www.google.com/maps/search/?api=1&query=${coordinates}`;
   calculateBearing();
 }
-$('bearing-gps').addEventListener('click',async()=>{const fix=await applyGPS('bearing-origin',null,'bearing-gps-status');if(fix){bearingPosition=fix;calculateBearing();}});
+$('bearing-gps').addEventListener('click',async()=>{if(await applyGPS('bearing-origin',null,'bearing-gps-status'))calculateBearing();});
 $('bearing-calculate').addEventListener('click',calculateBearing);
-$('bearing-origin').addEventListener('input',()=>{bearingPosition=null;calculateBearing();});
+$('bearing-origin').addEventListener('input',calculateBearing);
 $('compass-enable').addEventListener('click',enableCompass);
 $('bearing-back').addEventListener('click',detailBack);
 $('bearing-qsl').addEventListener('click',()=>{if(bearingSpotId)openQSL(bearingSpotId);});
