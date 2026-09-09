@@ -10,6 +10,20 @@ let requestId = crypto.randomUUID();
 let mineActive=[],qslTarget=null,qslNext=null,qslSequence=0,qslExpanded=false;
 const status = (text,error=false) => { $('status').textContent=text; $('status').classList.toggle('error',error); };
 const localStatus = (id,text,error=false) => { const el=$(id); if(!el)return; el.textContent=text; el.classList.toggle('error',error); };
+let titleTaps=0,titleTapTimer=0,cacheResetting=false;
+async function resetAppCache() {
+  if(cacheResetting)return;cacheResetting=true;status('Aggiornamento cache in corso…');
+  try {
+    if('serviceWorker' in navigator) await Promise.all((await navigator.serviceWorker.getRegistrations()).map(registration=>registration.unregister()));
+    if('caches' in window) await Promise.all((await caches.keys()).map(key=>caches.delete(key)));
+  } finally { location.reload(); }
+}
+function titleTap() {
+  if(cacheResetting)return;titleTaps++;clearTimeout(titleTapTimer);titleTapTimer=setTimeout(()=>{titleTaps=0;},1400);
+  if(titleTaps>=5){titleTaps=0;clearTimeout(titleTapTimer);resetAppCache();}
+}
+$('cq-title').addEventListener('click',titleTap);
+$('cq-title').addEventListener('keydown',event=>{if(event.key==='Enter' || event.key===' '){event.preventDefault();titleTap();}});
 for (const mode of MODES) $('mode').add(new Option(mode,mode));
 $('band').value = '40'; $('mode').value = 'Fonia';
 const frequency=frequencyControl($('frequency-control'),$('frequency'),()=>BANDS.find(b=>b[0]===$('band').value));
