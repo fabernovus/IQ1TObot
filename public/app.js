@@ -9,6 +9,7 @@ let mine = null, busy = false, loading = false, authenticated = false, profileLo
 let requestId = crypto.randomUUID();
 let mineActive=[],qslTarget=null,qslNext=null,qslSequence=0,qslExpanded=false;
 const status = (text,error=false) => { $('status').textContent=text; $('status').classList.toggle('error',error); };
+const localStatus = (id,text,error=false) => { const el=$(id); if(!el)return; el.textContent=text; el.classList.toggle('error',error); };
 for (const mode of MODES) $('mode').add(new Option(mode,mode));
 $('band').value = '40'; $('mode').value = 'Fonia';
 const frequency=frequencyControl($('frequency-control'),$('frequency'),()=>BANDS.find(b=>b[0]===$('band').value));
@@ -139,12 +140,12 @@ $('qsl-form').addEventListener('submit',async event=>{
     if(qslTarget?.id===target.id){qslExpanded=false;await loadQSL(target.id);}await refresh(true);status('QSL registrato. Aggiornamento del messaggio Telegram in corso…');
   } catch(error){$('qsl-status').textContent=error.message;}finally{busy=false;locks();}
 });
-async function applyGPS(targetId, qualityId) {
-  if(busy)return;busy=true;locks();status('Acquisizione della posizione precisa…');
-  try {const p=await position();if(p.accuracy>100)throw new Error(`Posizione troppo imprecisa (±${Math.round(p.accuracy)} m). Riprova all’aperto.`);$(targetId).value=locatorFromGPS(p.latitude,p.longitude);if(qualityId)$(qualityId).textContent=`GPS ±${Math.round(p.accuracy)} m`;status('Locator aggiornato dalla posizione precisa.');}
-  catch(error){status(error.message,true);}finally{busy=false;locks();}
+async function applyGPS(targetId, qualityId, feedbackId) {
+  if(busy)return;busy=true;locks();localStatus(feedbackId,'Acquisizione della posizione precisa…');
+  try {const p=await position();if(p.accuracy>100)throw new Error(`Posizione troppo imprecisa (±${Math.round(p.accuracy)} m). Riprova all’aperto.`);$(targetId).value=locatorFromGPS(p.latitude,p.longitude);if(qualityId)$(qualityId).textContent=`GPS ±${Math.round(p.accuracy)} m`;localStatus(feedbackId,`Locator aggiornato · precisione ±${Math.round(p.accuracy)} m.`);}
+  catch(error){localStatus(feedbackId,error.message,true);}finally{busy=false;locks();}
 }
-$('qsl-gps').addEventListener('click',()=>applyGPS('qsl-locator'));
+$('qsl-gps').addEventListener('click',()=>applyGPS('qsl-locator',null,'qsl-gps-status'));
 function calculateBearing() {
   try {
     const origin=$('bearing-origin').value.trim().toUpperCase(),angle=bearingBetween(origin,bearingTarget);
@@ -159,7 +160,7 @@ function showBearing(target,callsign='') {
   $('bearing-origin').value=$('locator').value || mine?.locator || $('profile-locator').value;
   calculateBearing();$('bearing-panel').scrollIntoView({behavior:'smooth',block:'center'});
 }
-$('bearing-gps').addEventListener('click',()=>applyGPS('bearing-origin'));
+$('bearing-gps').addEventListener('click',()=>applyGPS('bearing-origin',null,'bearing-gps-status'));
 $('bearing-calculate').addEventListener('click',calculateBearing);
 $('profile-form').addEventListener('submit',async event=>{
   event.preventDefault();if(busy)return;busy=true;locks();
@@ -232,19 +233,19 @@ function offlineLocator() {
 }
 $('offline-calc').addEventListener('click',offlineLocator);
 $('offline-gps').addEventListener('click',async()=>{
+  $('offline-result').textContent='Acquisizione della posizione…';
   try {const p=await position();$('offline-lat').value=p.latitude.toFixed(6);$('offline-lon').value=p.longitude.toFixed(6);offlineLocator();}
   catch(error){$('offline-result').textContent=error.message;}
 });
 $('gps').addEventListener('click',async()=>{
-  busy=true;locks();status('Acquisizione della posizione…');
+  busy=true;locks();localStatus('gps-quality','Acquisizione della posizione…');
   try {
     const p=await position();
     if(p.accuracy>100)throw new Error(`Posizione troppo imprecisa (±${Math.round(p.accuracy)} m). Locator non cambiato: riprova all’aperto o inseriscilo manualmente.`);
     $('locator').value=locatorFromGPS(p.latitude,p.longitude);
-    $('gps-quality').textContent=`Precisione dichiarata: ±${Math.round(p.accuracy)} m. Controlla il locator se sei vicino al confine della zona.`;
-    status('Locator aggiornato con la posizione precisa.');
+    localStatus('gps-quality',`Locator aggiornato · precisione ±${Math.round(p.accuracy)} m. Controlla il locator se sei vicino al confine della zona.`);
   }
-  catch(e) { status(e.message,true); }
+  catch(e) { localStatus('gps-quality',e.message,true); }
   finally { busy=false;locks(); }
 });
 $('spot-form').addEventListener('submit',async event=>{

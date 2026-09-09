@@ -80,6 +80,7 @@ async function handle(request,env,ctx) {
   if(request.method==='DELETE' && qslDelete) {
     const spot=await env.DB.prepare('SELECT id FROM spots WHERE id=?').bind(qslDelete[1]).first();
     if(!spot)throw fail(404,'SPOT non trovato.');
+    if(spot.ended_at)throw fail(409,'Lo SPOT è terminato: le conferme QSL non possono più essere eliminate.');
     const result=await env.DB.prepare('DELETE FROM qsl_logs WHERE id=? AND spot_id=? AND user_id=?').bind(Number(qslDelete[2]),spot.id,user.id).run();
     if(!result.meta.changes)throw fail(404,'QSL non trovato o non sei il suo autore.');
     ctx.waitUntil(syncSpot(env,spot.id));return json({ok:true});
@@ -92,7 +93,7 @@ async function handle(request,env,ctx) {
       const before=Number(url.searchParams.get('before') || Number.MAX_SAFE_INTEGER);
       if(!Number.isSafeInteger(before) || before<1)throw fail(400,'Pagina non valida.');
       const [logs,own]=await env.DB.batch([
-        env.DB.prepare('SELECT id,callsign,locator,report,occurred_at,distance_km,(user_id=?) AS can_delete FROM qsl_logs WHERE spot_id=? AND id<? ORDER BY id DESC LIMIT 51').bind(user.id,spot.id,before),
+        env.DB.prepare('SELECT id,callsign,locator,report,occurred_at,distance_km,(user_id=? AND ? IS NULL) AS can_delete FROM qsl_logs WHERE spot_id=? AND id<? ORDER BY id DESC LIMIT 51').bind(user.id,spot.ended_at,spot.id,before),
         env.DB.prepare('SELECT id FROM qsl_logs WHERE spot_id=? AND user_id=?').bind(spot.id,user.id)
       ]);
       const rows=logs.results.slice(0,50);
