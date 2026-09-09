@@ -1,0 +1,15 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "iq1to-cq-spot",
+  "main": "src/worker.js",
+  "compatibility_date": "2026-09-09",
+  "assets": { "directory": "./public", "binding": "ASSETS", "run_worker_first": ["/api/*"] },
+  "d1_databases": [{
+    "binding": "DB",
+    "database_name": "iq1to-spots",
+    "database_id": "cc667473-fa44-41a4-a99a-4f336c214f15",
+    "migrations_dir": "migrations"
+  }],
+  "vars": { "TELEGRAM_GROUP_ID": "@IQ1TO", "TELEGRAM_TOPIC_ID": "8" },
+  "triggers": { "crons": ["*/5 * * * *"] }
+}
