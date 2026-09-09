@@ -1,6 +1,6 @@
 import { verifyInitData } from './auth.js';
-import { validateSpot } from '../public/radio.js';
-import { isMember, syncSpot, telegram } from './telegram.js';
+import { validateSpot, validateProfile } from '../public/radio.js';
+import { isMember, syncSpot, telegram, topicFor } from './telegram.js';
 const json = (value, status=200) => Response.json(value, { status, headers: { 'Cache-Control':'no-store', 'X-Content-Type-Options':'nosniff' } });
 const fail = (status,message) => Object.assign(new Error(message),{status});
 const now = () => Math.floor(Date.now()/1000);
@@ -21,8 +21,8 @@ async function handle(request,env,ctx) {
   const url = new URL(request.url);
   if (!url.pathname.startsWith('/api/')) return env.ASSETS.fetch(request);
   const missing = [];
-  if (!env.TELEGRAM_BOT_TOKEN?.trim()) missing.push('TELEGRAM_BOT_TOKEN');
-  if (!env.TELEGRAM_GROUP_ID?.trim()) missing.push('TELEGRAM_GROUP_ID');
+  if (typeof env.TELEGRAM_BOT_TOKEN !== 'string' || !env.TELEGRAM_BOT_TOKEN.trim()) missing.push('TELEGRAM_BOT_TOKEN');
+  if (!String(env.TELEGRAM_GROUP_ID ?? '').trim()) missing.push('TELEGRAM_GROUP_ID');
   if (!/^[1-9]\d*$/.test(env.TELEGRAM_TOPIC_ID || '')) missing.push('TELEGRAM_TOPIC_ID (intero maggiore di zero)');
   if (missing.length) throw fail(503,`Configurazione Worker incompleta: ${missing.join(', ')}. Contatta un amministratore.`);
   const origin = request.headers.get('Origin');
@@ -34,12 +34,30 @@ async function handle(request,env,ctx) {
   try { member = await telegram(env,'getChatMember',{ chat_id:env.TELEGRAM_GROUP_ID,user_id:user.id }); }
   catch { throw fail(503,'Non riesco a verificare l’appartenenza al gruppo. Riprova tra poco.'); }
   if (!isMember(member)) throw fail(403,'Questa Mini App è riservata ai membri del gruppo IQ1TO.');
+  if (!env.DB || typeof env.DB.prepare !== 'function' || typeof env.DB.batch !== 'function') {
+    throw fail(503,'Database non collegato: configura il binding D1 chiamato DB nel Worker.');
+  }
   if (request.method === 'GET' && url.pathname === '/api/spots') {
-    const [active,mine] = await env.DB.batch([
-      env.DB.prepare(`SELECT id,callsign,band,frequency_hz,mode,locator,created_at FROM spots WHERE ended_at IS NULL ORDER BY created_at DESC LIMIT 200`),
-      env.DB.prepare(`SELECT id,callsign,band,frequency_hz,mode,locator,created_at,ended_at,sync_state FROM spots WHERE user_id=? ORDER BY created_at DESC LIMIT 1`).bind(user.id)
+    const [active,mine,profile] = await env.DB.batch([
+      env.DB.prepare(`SELECT id,callsign,band,frequency_hz,mode,locator,created_at,activity,activity_name FROM spots WHERE ended_at IS NULL ORDER BY created_at DESC LIMIT 200`),
+      env.DB.prepare(`SELECT id,callsign,band,frequency_hz,mode,locator,created_at,ended_at,sync_state,activity,activity_name FROM spots WHERE user_id=? ORDER BY created_at DESC LIMIT 1`).bind(user.id),
+      env.DB.prepare('SELECT callsign,name,default_locator,is_admin FROM profiles WHERE telegram_id=?').bind(user.id)
     ]);
-    return json({ spots:active.results, mine:mine.results[0] || null });
+    return json({ spots:active.results, mine:mine.results[0] || null, profile:profile.results[0] || null });
+  }
+  if (request.method === 'PUT' && url.pathname === '/api/profile') {
+    let profile;
+    const input=await body(request);
+    try { profile=validateProfile(input); } catch(error) { throw fail(400,error.message); }
+    try {
+      await env.DB.prepare(`INSERT INTO profiles(telegram_id,callsign,name,default_locator) VALUES(?,?,?,?)
+        ON CONFLICT(telegram_id) DO UPDATE SET callsign=excluded.callsign,name=excluded.name,default_locator=excluded.default_locator`)
+        .bind(user.id,profile.callsign,profile.name,profile.default_locator).run();
+    } catch(error) {
+      if (/UNIQUE constraint failed:\s*profiles.callsign/i.test(error.message)) throw fail(409,'Questo nominativo è già associato a un altro account Telegram.');
+      throw error;
+    }
+    return json({ok:true});
   }
   if (request.method === 'POST' && url.pathname === '/api/spots') {
     const input = await body(request);
@@ -50,9 +68,9 @@ async function handle(request,env,ctx) {
     if (previous) return json({id:previous.id},200);
     const time = now();
     // Atomic cooldown plus unique partial index protects simultaneous requests.
-    const result = await env.DB.prepare(`INSERT OR IGNORE INTO spots(id,user_id,callsign,band,frequency_hz,mode,locator,created_at)
-      SELECT ?,?,?,?,?,?,?,? WHERE NOT EXISTS(SELECT 1 FROM spots WHERE user_id=? AND created_at>?)`)
-      .bind(input.id,user.id,spot.callsign,spot.band,spot.frequency_hz,spot.mode,spot.locator,time,user.id,time-60).run();
+    const result = await env.DB.prepare(`INSERT OR IGNORE INTO spots(id,user_id,callsign,band,frequency_hz,mode,locator,created_at,activity,activity_name,topic_id)
+      SELECT ?,?,?,?,?,?,?,?,?,?,? WHERE NOT EXISTS(SELECT 1 FROM spots WHERE user_id=? AND created_at>?)`)
+      .bind(input.id,user.id,spot.callsign,spot.band,spot.frequency_hz,spot.mode,spot.locator,time,spot.activity,spot.activity_name,topicFor(spot.activity,env),user.id,time-60).run();
     if (!result.meta.changes) throw fail(409,'Hai già uno SPOT attivo oppure ne hai pubblicato uno nell’ultimo minuto.');
     ctx.waitUntil(syncSpot(env,input.id));
     return json({id:input.id},201);
@@ -71,7 +89,20 @@ async function handle(request,env,ctx) {
 export default {
   async fetch(request,env,ctx) {
     try { return await handle(request,env,ctx); }
-    catch (error) { return json({error:error.status ? error.message : 'Errore temporaneo. Riprova tra poco.'},error.status || 500); }
+    catch (error) {
+      if (error.status) return json({error:error.message},error.status);
+      // Classify known failures without exposing raw SQL, credentials or request data.
+      const detail = [error.message,error.cause?.message].filter(Boolean).join(' ');
+      if (/no such table:\s*(spots|profiles)\b/i.test(detail)) {
+        return json({error:'Database non inizializzato: applica le migrazioni D1 sul database remoto.'},503);
+      }
+      if (/no such column\b|has no column named\b/i.test(detail)) {
+        return json({error:'Database da aggiornare: applica le migrazioni D1 sul database remoto.'},503);
+      }
+      const reference = crypto.randomUUID();
+      console.error(JSON.stringify({event:'request_failed',reference,category:/D1_ERROR/.test(detail) ? 'database' : 'internal'}));
+      return json({error:`Errore temporaneo. Riprova tra poco. Riferimento: ${reference}`},500);
+    }
   },
   async scheduled(_event,env) {
     if (!env.TELEGRAM_BOT_TOKEN || !/^[1-9]\d*$/.test(env.TELEGRAM_TOPIC_ID || '')) return;

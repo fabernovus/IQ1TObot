@@ -29,7 +29,31 @@ export function validateSpot(input) {
   if (!band || frequency_hz < band[1] || frequency_hz > band[2]) throw new Error('La frequenza non rientra nella banda selezionata.');
   if (!MODES.includes(input.mode)) throw new Error('Modo non valido.');
   const locator = String(input.locator ?? '').toUpperCase();
-  if (!/^[A-R]{2}[0-9]{2}[A-X]{2}$/.test(locator)) throw new Error('Acquisisci prima la posizione GPS.');
-  return { callsign, band: band[0], frequency_hz, mode: input.mode, locator };
+  if (!/^[A-R]{2}[0-9]{2}[A-X]{2}$/.test(locator)) throw new Error('Inserisci un locator valido a sei caratteri oppure usa il GPS.');
+  const activity = String(input.activity ?? '').toUpperCase();
+  const activity_name = String(input.activity_name ?? '').trim().toUpperCase();
+  if (!['','SOTA','POTA','IAC','CONTEST'].includes(activity)) throw new Error('Attività non valida.');
+  if (activity && (!activity_name || activity_name.length > 80 || /[\x00-\x1f]/.test(activity_name))) throw new Error('Inserisci il nome o riferimento dell’attività (massimo 80 caratteri).');
+  return { callsign, band: band[0], frequency_hz, mode: input.mode, locator, activity, activity_name: activity ? activity_name : '' };
+}
+export function validateProfile(input) {
+  const callsign = String(input?.callsign ?? '').trim().toUpperCase();
+  const default_locator = String(input?.default_locator ?? '').trim().toUpperCase();
+  validateSpot({callsign,locator:default_locator,band:'40',frequency:'7.1',mode:'CW'});
+  const name = String(input?.name ?? '').trim();
+  if (!name || name.length > 60 || /[\x00-\x1f]/.test(name)) throw new Error('Inserisci il nome (massimo 60 caratteri).');
+  return {callsign,name,default_locator};
+}
+export function locatorCenter(locator) {
+  const l = String(locator).toUpperCase();
+  if (!/^[A-R]{2}[0-9]{2}[A-X]{2}$/.test(l)) throw new Error('Inserisci un locator valido a sei caratteri.');
+  return {latitude:(l.charCodeAt(1)-65)*10+Number(l[3])+(l.charCodeAt(5)-65+.5)/24-90,
+    longitude:(l.charCodeAt(0)-65)*20+Number(l[2])*2+(l.charCodeAt(4)-65+.5)/12-180};
+}
+export function bearingBetween(from,to) {
+  const a=locatorCenter(from),b=locatorCenter(to),rad=Math.PI/180;
+  if (a.latitude===b.latitude && a.longitude===b.longitude) return null;
+  const p=a.latitude*rad,q=b.latitude*rad,d=(b.longitude-a.longitude)*rad;
+  return (Math.atan2(Math.sin(d)*Math.cos(q),Math.cos(p)*Math.sin(q)-Math.sin(p)*Math.cos(q)*Math.cos(d))/rad+360)%360;
 }
 export const formatFrequency = hz => (hz / 1e6).toFixed(6).replace(/0+$/, '').replace(/\.$/, '');

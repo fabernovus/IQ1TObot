@@ -4,8 +4,8 @@ import { createHmac } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
 import { verifyInitData } from '../src/auth.js';
-import { BANDS, locatorFromGPS, validateSpot } from '../public/radio.js';
-import { isMember, syncSpot } from '../src/telegram.js';
+import { BANDS, locatorFromGPS, validateSpot, validateProfile, bearingBetween } from '../public/radio.js';
+import { isMember, syncSpot, spotMessage, topicFor } from '../src/telegram.js';
 import worker from '../src/worker.js';
 const token='test-token-not-a-real-credential';
 function signed(id=123,date=Math.floor(Date.now()/1000)) {
@@ -17,6 +17,7 @@ function signed(id=123,date=Math.floor(Date.now()/1000)) {
 const input={id:'c8006325-6077-4d30-854b-e33b89fe744f',callsign:'iu1abc/p',band:'40',frequency:'7,100',mode:'Fonia',locator:'JN35TA'};
 function database() {
   const db=new DatabaseSync(':memory:');db.exec(readFileSync(new URL('../migrations/0001_spots.sql',import.meta.url),'utf8'));
+  db.exec(readFileSync(new URL('../migrations/0002_profiles_activities.sql',import.meta.url),'utf8'));
   return { prepare(sql) {
     const stmt=db.prepare(sql);let args=[];
     const wrapper={bind(...values){args=values;return wrapper;},async first(){return stmt.get(...args) || null;},async all(){return {results:stmt.all(...args)};},async run(){const r=stmt.run(...args);return {meta:{changes:Number(r.changes)}};}};return wrapper;
@@ -49,6 +50,62 @@ test('group membership statuses',()=>{
   for(const status of ['creator','administrator','member'])assert.ok(isMember({status}));
   for(const status of ['left','kicked','restricted'])assert.equal(isMember({status}),false);
   assert.ok(isMember({status:'restricted',is_member:true}));
+});
+test('activity routing, uppercase, escaped HTML and bearings',()=>{
+  const env={TELEGRAM_TOPIC_ID:'8'};
+  for(const activity of ['SOTA','POTA']) assert.equal(topicFor(activity,env),12);
+  assert.equal(topicFor('IAC',env),5);
+  for(const activity of ['','CONTEST'])assert.equal(topicFor(activity,env),8);
+  const spot=validateSpot({...input,activity:'sota',activity_name:'i/pm-001 & <test>'});
+  assert.equal(spot.activity_name,'I/PM-001 & <TEST>');assert.equal(spot.callsign,'IU1ABC/P');
+  assert.throws(()=>validateSpot({...input,activity:'CONTEST'}));
+  const html=spotMessage({...spot,created_at:1});assert.ok(html.includes('<b>'));assert.ok(html.includes('&amp; &lt;TEST&gt;'));assert.ok(!html.includes('<TEST>'));
+  assert.equal(validateProfile({callsign:'iu1abc',name:'Antonio',default_locator:'jn35uc'}).default_locator,'JN35UC');
+  assert.equal(bearingBetween('JN35UC','JN35UC'),null);
+  assert.equal(Math.round(bearingBetween('JN35UC','JN36UC')),0);
+  assert.equal(Math.round(bearingBetween('JN36UC','JN35UC')),180);
+  assert.ok(bearingBetween('JN35UC','JN45UC')>89 && bearingBetween('JN35UC','JN45UC')<90);
+});
+test('profile registration is bound to signed Telegram ID and preserves admin role',async t=>{
+  const DB=database();t.after(()=>DB.close());
+  t.mock.method(globalThis,'fetch',async()=>Response.json({ok:true,result:{status:'member'}}));
+  const env={DB,TELEGRAM_BOT_TOKEN:token,TELEGRAM_GROUP_ID:'@IQ1TO',TELEGRAM_TOPIC_ID:'8'};
+  const request=(id,payload)=>worker.fetch(new Request('https://spot.example/api/profile',{method:'PUT',headers:{'X-Telegram-Init-Data':signed(id),'Content-Type':'application/json'},body:JSON.stringify(payload)}),env,{});
+  const seeded=await DB.prepare('SELECT * FROM profiles WHERE telegram_id=22699108').first();
+  assert.equal(seeded.callsign,'IU1WWY');assert.equal(seeded.default_locator,'JN35UC');assert.equal(seeded.is_admin,1);
+  const profile={callsign:'iu1abc',name:'Test',default_locator:'jn35uc',is_admin:1,telegram_id:22699108};
+  assert.equal((await request(123,profile)).status,200);
+  const registered=await DB.prepare('SELECT * FROM profiles WHERE telegram_id=123').first();assert.equal(registered.is_admin,0);assert.equal(registered.callsign,'IU1ABC');
+  assert.equal((await request(456,profile)).status,409);
+  assert.equal((await request(22699108,{callsign:'IU1WWY',name:'Antonio',default_locator:'JN35UC',is_admin:0})).status,200);
+  assert.equal((await DB.prepare('SELECT is_admin FROM profiles WHERE telegram_id=22699108').first()).is_admin,1);
+});
+test('configuration accepts numeric group IDs and diagnoses missing D1/schema',async t=>{
+  t.mock.method(globalThis,'fetch',async()=>Response.json({ok:true,result:{status:'member'}}));
+  const env={TELEGRAM_BOT_TOKEN:token,TELEGRAM_GROUP_ID:-1001234567890,TELEGRAM_TOPIC_ID:8};
+  const request=()=>worker.fetch(new Request('https://spot.example/api/spots',{headers:{'X-Telegram-Init-Data':signed()}}),env,{});
+  let response=await request();assert.equal(response.status,503);assert.match((await response.json()).error,/binding D1 chiamato DB/);
+  env.DB={prepare(){return {bind(){return this;}};},async batch(){throw new Error('D1_ERROR: no such table: spots: SQLITE_ERROR');}};
+  response=await request();assert.equal(response.status,503);assert.match((await response.json()).error,/Database non inizializzato/);
+  env.DB.batch=async()=>{throw new Error('D1_ERROR: no such column: sync_state');};
+  response=await request();assert.equal(response.status,503);assert.match((await response.json()).error,/Database da aggiornare/);
+});
+test('new activity spots persist their topic and send HTML with antenna link',async t=>{
+  const DB=database();t.after(()=>DB.close());const sent=[];
+  t.mock.method(globalThis,'fetch',async(url,options)=>{
+    const payload=JSON.parse(options.body);
+    if(url.endsWith('/getChatMember'))return Response.json({ok:true,result:{status:'member'}});
+    sent.push(payload);return Response.json({ok:true,result:{message_id:sent.length}});
+  });
+  const env={DB,TELEGRAM_BOT_TOKEN:token,TELEGRAM_GROUP_ID:'@IQ1TO',TELEGRAM_TOPIC_ID:'8'};
+  for(const [i,activity] of ['SOTA','POTA','IAC','CONTEST',''].entries()) {
+    const pending=[],id=crypto.randomUUID();
+    const result=await worker.fetch(new Request('https://spot.example/api/spots',{method:'POST',headers:{'X-Telegram-Init-Data':signed(100+i),'Content-Type':'application/json'},body:JSON.stringify({...input,id,activity,activity_name:'test'})}),env,{waitUntil(p){pending.push(p);}});
+    assert.equal(result.status,201);await Promise.all(pending);
+    const spot=await DB.prepare('SELECT * FROM spots WHERE id=?').bind(id).first();
+    assert.equal(spot.topic_id,topicFor(activity,env));assert.equal(sent[i].message_thread_id,spot.topic_id);assert.equal(sent[i].parse_mode,'HTML');
+    assert.ok(sent[i].reply_markup.inline_keyboard[0][0].url.endsWith('startapp=bearing_JN35TA'));
+  }
 });
 test('authenticated create/list, idempotency, ownership, QRT and Telegram sync',async t=>{
   const DB=database();t.after(()=>DB.close());
