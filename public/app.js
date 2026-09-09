@@ -1,11 +1,11 @@
-import { BANDS, MODES, locatorFromGPS, validateSpot, validateProfile, validateQSL, formatFrequency, formatUtcLogDate, bearingBetween, distanceBetween } from './radio.js';
+import { BANDS, MODES, locatorFromGPS, locatorCenter, validateSpot, validateProfile, validateQSL, formatFrequency, formatUtcLogDate, bearingBetween, distanceBetween } from './radio.js';
 import { bandControl, frequencyControl } from './controls.js';
 import { preciseGPS } from './gps.js';
 const $ = id => document.getElementById(id);
 const tg = window.Telegram?.WebApp;
 const initData = tg?.initData;
 if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js').catch(()=>{});
-let mine = null, busy = false, loading = false, authenticated = false, profileLoaded = false, activity = '', bearingTarget = '';
+let mine = null, busy = false, loading = false, authenticated = false, profileLoaded = false, activity = '', bearingTarget = '', bearingPosition = null, bearingAngle = null, deviceHeading = null, compassListening = false, bearingMapKey = '';
 let requestId = crypto.randomUUID();
 let mineActive=[],qslTarget=null,qslNext=null,qslSequence=0,qslExpanded=false;
 const status = (text,error=false) => { $('status').textContent=text; $('status').classList.toggle('error',error); };
@@ -162,7 +162,7 @@ $('qsl-form').addEventListener('submit',async event=>{
 });
 async function applyGPS(targetId, qualityId, feedbackId) {
   if(busy)return;busy=true;locks();localStatus(feedbackId,'Acquisizione della posizione precisa…');
-  try {const p=await position();if(p.accuracy>100)throw new Error(`Posizione troppo imprecisa (±${Math.round(p.accuracy)} m). Riprova all’aperto.`);$(targetId).value=locatorFromGPS(p.latitude,p.longitude);if(qualityId)$(qualityId).textContent=`GPS ±${Math.round(p.accuracy)} m`;localStatus(feedbackId,`Locator aggiornato · precisione ±${Math.round(p.accuracy)} m.`);}
+  try {const p=await position();if(p.accuracy>100)throw new Error(`Posizione troppo imprecisa (±${Math.round(p.accuracy)} m). Riprova all’aperto.`);$(targetId).value=locatorFromGPS(p.latitude,p.longitude);if(qualityId)$(qualityId).textContent=`GPS ±${Math.round(p.accuracy)} m`;localStatus(feedbackId,`Locator aggiornato · precisione ±${Math.round(p.accuracy)} m.`);return p;}
   catch(error){localStatus(feedbackId,error.message,true);}finally{busy=false;locks();}
 }
 $('qsl-gps').addEventListener('click',()=>applyGPS('qsl-locator',null,'qsl-gps-status'));
@@ -170,18 +170,55 @@ function calculateBearing() {
   try {
     const origin=$('bearing-origin').value.trim().toUpperCase(),angle=bearingBetween(origin,bearingTarget);
     const distance=distanceBetween(origin,bearingTarget);
+    bearingAngle=angle;updateBearingVisuals(origin);
     $('bearing-result').textContent=angle===null ? `Stesso locator · distanza ${distance.toFixed(1)} km` : `${Math.round(angle)%360}° dal nord geografico · ${distance.toFixed(1)} km · da ${origin} a ${bearingTarget}`;
-  } catch(error) { $('bearing-result').textContent=error.message; }
+  } catch(error) { bearingAngle=null;$('bearing-visuals').hidden=true;$('bearing-result').textContent=error.message; }
+}
+function updateCompass() {
+  if(bearingAngle===null){$('compass-bearing').textContent='—';$('compass-dial').classList.add('unavailable');$('compass-status').textContent='I due locator coincidono: non c’è una direzione utile.';return;}
+  $('compass-dial').classList.remove('unavailable');
+  const relative=(bearingAngle-(deviceHeading ?? 0)+360)%360;
+  $('compass-dial').style.setProperty('--target-angle',`${relative}deg`);
+  $('compass-bearing').textContent=`${Math.round(bearingAngle)%360}°`;
+  if(deviceHeading!==null)$('compass-status').textContent=`Telefono a ${Math.round(deviceHeading)}° · ruotalo finché la freccia punta in alto.`;
+}
+function mercator(latitude) {const value=Math.max(-85,Math.min(85,latitude))*Math.PI/180;return Math.log(Math.tan(Math.PI/4+value/2));}
+function updateBearingMap(origin) {
+  const own=bearingPosition || locatorCenter(origin),target=locatorCenter(bearingTarget);
+  let west=Math.min(own.longitude,target.longitude),east=Math.max(own.longitude,target.longitude),south=Math.min(own.latitude,target.latitude),north=Math.max(own.latitude,target.latitude);
+  const lonPad=Math.max(.08,(east-west)*.22),latPad=Math.max(.05,(north-south)*.22);west=Math.max(-180,west-lonPad);east=Math.min(180,east+lonPad);south=Math.max(-85,south-latPad);north=Math.min(85,north+latPad);
+  const key=[west,south,east,north].map(value=>value.toFixed(5)).join(',');
+  if(key!==bearingMapKey){bearingMapKey=key;$('bearing-map').src=`https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(key)}&layer=mapnik`;}
+  const place=(id,point)=>{const x=(point.longitude-west)/(east-west)*100,y=(mercator(north)-mercator(point.latitude))/(mercator(north)-mercator(south))*100;$(id).style.left=`${Math.max(2,Math.min(98,x))}%`;$(id).style.top=`${Math.max(2,Math.min(94,y))}%`;};
+  place('map-own',own);place('map-target',target);
+}
+function updateBearingVisuals(origin) {$('bearing-visuals').hidden=false;updateCompass();updateBearingMap(origin);}
+function orientationChanged(event) {
+  let heading=null;
+  if(Number.isFinite(event.webkitCompassHeading))heading=event.webkitCompassHeading;
+  else if(Number.isFinite(event.alpha)){const screenAngle=screen.orientation?.angle || window.orientation || 0;heading=(360-event.alpha+screenAngle+360)%360;}
+  if(heading===null)return;deviceHeading=heading;updateCompass();
+}
+async function enableCompass() {
+  try {
+    const Orientation=window.DeviceOrientationEvent;
+    if(!Orientation)throw new Error('Sensore di orientamento non disponibile su questo dispositivo.');
+    if(typeof Orientation.requestPermission==='function' && await Orientation.requestPermission()!=='granted')throw new Error('Permesso bussola non concesso.');
+    if(!compassListening){window.addEventListener('ondeviceorientationabsolute' in window?'deviceorientationabsolute':'deviceorientation',orientationChanged,true);compassListening=true;}
+    $('compass-enable').hidden=true;$('compass-status').textContent='Muovi il telefono a forma di 8 per calibrare la bussola.';
+  } catch(error) {$('compass-status').textContent=error.message;}
 }
 function showBearing(target,callsign='') {
   selectTab('list');
-  bearingTarget=target;$('bearing-panel').hidden=false;
+  bearingTarget=target;bearingPosition=null;$('bearing-panel').hidden=false;
   $('bearing-target').textContent=`Verso ${callsign ? callsign+' · ' : ''}${target}`;
   $('bearing-origin').value=$('locator').value || mine?.locator || $('profile-locator').value;
   calculateBearing();$('bearing-panel').scrollIntoView({behavior:'smooth',block:'center'});
 }
-$('bearing-gps').addEventListener('click',()=>applyGPS('bearing-origin',null,'bearing-gps-status'));
+$('bearing-gps').addEventListener('click',async()=>{const fix=await applyGPS('bearing-origin',null,'bearing-gps-status');if(fix){bearingPosition=fix;calculateBearing();}});
 $('bearing-calculate').addEventListener('click',calculateBearing);
+$('bearing-origin').addEventListener('input',()=>{bearingPosition=null;calculateBearing();});
+$('compass-enable').addEventListener('click',enableCompass);
 $('profile-form').addEventListener('submit',async event=>{
   event.preventDefault();if(busy)return;busy=true;locks();
   try {
