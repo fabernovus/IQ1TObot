@@ -4,7 +4,9 @@ import { createHmac } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
 import { verifyInitData } from '../src/auth.js';
-import { BANDS, locatorFromGPS, validateSpot, validateProfile, bearingBetween } from '../public/radio.js';
+import { BANDS, locatorFromGPS, locatorCenter, validateSpot, validateProfile, bearingBetween } from '../public/radio.js';
+import { stepFrequency } from '../public/controls.js';
+import { preciseGPS } from '../public/gps.js';
 import { isMember, syncSpot, spotMessage, topicFor } from '../src/telegram.js';
 import worker from '../src/worker.js';
 const token='test-token-not-a-real-credential';
@@ -50,6 +52,42 @@ test('group membership statuses',()=>{
   for(const status of ['creator','administrator','member'])assert.ok(isMember({status}));
   for(const status of ['left','kicked','restricted'])assert.equal(isMember({status}),false);
   assert.ok(isMember({status:'restricted',is_member:true}));
+});
+test('frequency digit increments carry, borrow and respect every band edge',()=>{
+  const band=BANDS.find(b=>b[0]==='40');
+  assert.equal(stepFrequency(7099999,0,1,band),7100000);
+  assert.equal(stepFrequency(7100000,0,-1,band),7099999);
+  assert.equal(stepFrequency(7100000,3,1,band),7101000);
+  for(const b of BANDS) {
+    assert.equal(stepFrequency(b[1],0,-1,b),b[1]);
+    assert.equal(stepFrequency(b[2],0,1,b),b[2]);
+  }
+});
+test('locator conversion preserves cell centres across hemispheres and boundaries',()=>{
+  for(const locator of ['JN35UC','JN35UB','AA00AA','RR99XX','JJ00AA','QF56OD','IO91WM','FN31PR']) {
+    const p=locatorCenter(locator);assert.equal(locatorFromGPS(p.latitude,p.longitude),locator);
+  }
+  assert.equal(locatorFromGPS(0,-0.000001),'IJ90XA');
+  assert.equal(locatorFromGPS(-0.000001,0),'JI09AX');
+});
+test('GPS requests uncached high accuracy, ignores stale fixes and stops on precise fix',async()=>{
+  let callback,options,cleared;
+  const geo={watchPosition(success,_error,opts){callback=success;options=opts;return 7;},clearWatch(id){cleared=id;}};
+  const result=preciseGPS(geo,1000);
+  assert.equal(options.enableHighAccuracy,true);assert.equal(options.maximumAge,0);
+  callback({timestamp:Date.now()-60000,coords:{latitude:0,longitude:0,accuracy:1}});
+  callback({timestamp:Date.now(),coords:{latitude:45,longitude:7,accuracy:800}});
+  callback({timestamp:Date.now(),coords:{latitude:45.1,longitude:7.7,accuracy:12}});
+  assert.deepEqual(await result,{latitude:45.1,longitude:7.7,accuracy:12});assert.equal(cleared,7);
+});
+test('GPS deadline keeps best fix and permission denial cleans up',async()=>{
+  let callback,errorCallback,cleared=0;
+  const geo={watchPosition(success,error){callback=success;errorCallback=error;return 1;},clearWatch(){cleared++;}};
+  const result=preciseGPS(geo,10);
+  callback({timestamp:Date.now(),coords:{latitude:45,longitude:7,accuracy:60}});
+  callback({timestamp:Date.now(),coords:{latitude:46,longitude:8,accuracy:900}});
+  assert.equal((await result).accuracy,60);assert.equal(cleared,1);
+  const denied=preciseGPS(geo,1000);errorCallback({code:1});await assert.rejects(denied,/Consenti/);assert.equal(cleared,2);
 });
 test('activity routing, uppercase, escaped HTML and bearings',()=>{
   const env={TELEGRAM_TOPIC_ID:'8'};

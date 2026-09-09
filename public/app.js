@@ -1,48 +1,43 @@
 import { BANDS, MODES, locatorFromGPS, validateSpot, validateProfile, formatFrequency, bearingBetween } from './radio.js';
+import { bandControl, frequencyControl } from './controls.js';
+import { preciseGPS } from './gps.js';
 const $ = id => document.getElementById(id);
 const tg = window.Telegram?.WebApp;
 const initData = tg?.initData;
 let mine = null, busy = false, loading = false, authenticated = false, profileLoaded = false, activity = '', bearingTarget = '';
 let requestId = crypto.randomUUID();
 const status = (text,error=false) => { $('status').textContent=text; $('status').classList.toggle('error',error); };
-for (const [band] of BANDS) $('band').add(new Option(`${band.replace('.',',')} m`,band));
 for (const mode of MODES) $('mode').add(new Option(mode,mode));
 $('band').value = '40'; $('mode').value = 'Fonia';
+const frequency=frequencyControl($('frequency-control'),$('frequency'),()=>BANDS.find(b=>b[0]===$('band').value));
 function bandHint() {
   const b = BANDS.find(b=>b[0]===$('band').value);
   $('frequency-hint').textContent=`Da ${formatFrequency(b[1])} a ${formatFrequency(b[2])} MHz`;
-  $('frequency-whole').replaceChildren();
-  for(let i=Math.floor(b[1]/1e6);i<=Math.floor(b[2]/1e6);i++) $('frequency-whole').add(new Option(String(i),String(i)));
-  const current=Math.round(Number($('frequency').value.replace(',','.'))*1e6);
-  setFrequency(Number.isFinite(current) && current>=b[1] && current<=b[2] ? current : b[1]);
+  frequency.setBand();
 }
-function decimals(hz) {
-  const band=BANDS.find(b=>b[0]===$('band').value),whole=Number($('frequency-whole').value)*1e6;
-  const low=Math.max(0,band[1]-whole),high=Math.min(999999,band[2]-whole);
-  const values=new Set([low,high]);
-  for(let n=Math.ceil(low/1000)*1000;n<=high;n+=1000) values.add(n);
-  const fraction=Math.max(low,Math.min(high,hz-whole));values.add(fraction);
-  $('frequency-decimal').replaceChildren();
-  for(const n of [...values].sort((a,b)=>a-b)) $('frequency-decimal').add(new Option(String(n).padStart(6,'0'),String(n)));
-  $('frequency-decimal').value=String(fraction);
+const bandWheel=bandControl($('band-wheel'),$('band'),bandHint,()=>authenticated && !busy);
+function selectTab(name,focus=false) {
+  for(const tab of ['list','create']) {
+    const active=tab===name;
+    $(`tab-${tab}`).setAttribute('aria-selected',String(active));$(`tab-${tab}`).tabIndex=active?0:-1;
+    $(`panel-${tab}`).hidden=!active;
+  }
+  if(name==='create')requestAnimationFrame(()=>bandWheel.reveal());
+  if(focus)$(`tab-${name}`).focus();
 }
-function setFrequency(hz) {
-  $('frequency-whole').value=String(Math.floor(hz/1e6));decimals(hz);
-  $('frequency').value=formatFrequency(hz);
+for(const tab of ['list','create']) {
+  $(`tab-${tab}`).addEventListener('click',()=>selectTab(tab));
+  $(`tab-${tab}`).addEventListener('keydown',event=>{
+    if(['ArrowLeft','ArrowRight','Home','End'].includes(event.key)) {
+      event.preventDefault();selectTab(event.key==='Home'?'list':event.key==='End'?'create':tab==='list'?'create':'list',true);
+    }
+  });
 }
-$('frequency-whole').addEventListener('change',()=>{
-  const hz=Number($('frequency-whole').value)*1e6+Number($('frequency-decimal').value);
-  decimals(hz);$('frequency').value=formatFrequency(Number($('frequency-whole').value)*1e6+Number($('frequency-decimal').value));
-});
-$('frequency-decimal').addEventListener('change',()=>{$('frequency').value=formatFrequency(Number($('frequency-whole').value)*1e6+Number($('frequency-decimal').value));});
-$('frequency').addEventListener('change',()=>{
-  const hz=Math.round(Number($('frequency').value.replace(',','.'))*1e6),b=BANDS.find(b=>b[0]===$('band').value);
-  if(Number.isFinite(hz) && hz>=b[1] && hz<=b[2]) setFrequency(hz);
-});
-$('band').addEventListener('change',bandHint); bandHint();
+$('show-active').addEventListener('click',()=>selectTab('list',true));
 for(const id of ['callsign','locator','profile-callsign','profile-locator','activity-name','bearing-origin']) {
   $(id).addEventListener('input',()=>{const start=$(id).selectionStart,end=$(id).selectionEnd;$(id).value=$(id).value.toUpperCase();$(id).setSelectionRange(start,end);});
 }
+$('locator').addEventListener('input',()=>{$('gps-quality').textContent='Locator inserito manualmente.';});
 $('activities').addEventListener('click',event=>{
   const button=event.target.closest('button[data-activity]');if(!button)return;
   activity=button.dataset.activity;
@@ -54,6 +49,8 @@ function locks() {
   $('refresh').disabled=!authenticated || busy || loading;
   $('qrt').disabled=busy;
   $('profile-fields').disabled=!authenticated || busy;
+  $('band-wheel').setAttribute('aria-disabled',String(!authenticated || busy));
+  $('band-wheel').tabIndex=authenticated && !busy ? 0 : -1;
 }
 async function api(path,method='GET',payload) {
   const response=await fetch(`/api${path}`,{method,headers:{'X-Telegram-Init-Data':initData || '',...(payload ? {'Content-Type':'application/json'}:{})},body:payload ? JSON.stringify(payload):undefined,signal:AbortSignal.timeout(20000)});
@@ -85,6 +82,7 @@ function calculateBearing() {
   } catch(error) { $('bearing-result').textContent=error.message; }
 }
 function showBearing(target,callsign='') {
+  selectTab('list');
   bearingTarget=target;$('bearing-panel').hidden=false;
   $('bearing-target').textContent=`Verso ${callsign ? callsign+' · ' : ''}${target}`;
   $('bearing-origin').value=$('locator').value || mine?.locator || $('profile-locator').value;
@@ -112,7 +110,7 @@ async function refresh(quiet=false) {
         $('callsign').value=data.profile.callsign;$('locator').value=data.profile.default_locator;
         $('profile-title').textContent=`${data.profile.callsign} · ${data.profile.name}${data.profile.is_admin ? ' · Admin' : ''}`;
         $('profile-panel').open=false;
-      } else {$('profile-panel').open=true;$('profile-title').textContent='Registra il tuo nominativo';}
+      } else {$('profile-panel').open=true;$('profile-title').textContent='Registra il tuo nominativo';selectTab('create');}
       if(mine && !mine.ended_at) {$('callsign').value=mine.callsign;$('locator').value=mine.locator;}
       profileLoaded=true;
       const start=tg?.initDataUnsafe?.start_param || new URLSearchParams(location.search).get('tgWebAppStartParam') || '';
@@ -120,6 +118,7 @@ async function refresh(quiet=false) {
     }
     const active=mine && !mine.ended_at;
     $('composer').hidden=!!active; $('my-spot').hidden=!active;
+    $('already-active').hidden=!active;
     $('my-details').replaceChildren(...(active ? [card(mine,true)] : []));
     $('spots').replaceChildren(...data.spots.map(s=>card(s,s.id===mine?.id)));
     if(!data.spots.length) { const p=document.createElement('p');p.className='empty';p.textContent='Nessuno SPOT attivo. Ci sentiamo in radio?';$('spots').append(p); }
@@ -131,29 +130,34 @@ async function refresh(quiet=false) {
     else if($('status').textContent.includes('in corso')) status('Topic aggiornato.');
   } finally { loading=false;locks(); }
 }
-function browserGPS() {
-  return new Promise((resolve,reject)=>{
-    if(!navigator.geolocation) return reject(new Error('GPS non disponibile su questo dispositivo.'));
-    navigator.geolocation.getCurrentPosition(p=>resolve(p.coords),()=>reject(new Error('Posizione non disponibile. Abilita il GPS e consenti l’accesso alla posizione.')),{enableHighAccuracy:false,timeout:15000,maximumAge:60000});
-  });
-}
 async function position() {
+  let browserFix=null;
+  try {browserFix=await preciseGPS();if(browserFix.accuracy<=100)return browserFix;} catch {}
   const lm=tg?.LocationManager;
   if(tg?.isVersionAtLeast?.('8.0') && lm) {
-    return new Promise((resolve,reject)=>{
+    try {const telegramFix=await new Promise((resolve,reject)=>{
       const timer=setTimeout(()=>reject(new Error('La richiesta GPS è scaduta. Riprova.')),20000);
       const get=()=>{
-        if(!lm.isLocationAvailable) { clearTimeout(timer);browserGPS().then(resolve,reject);return; }
-        lm.getLocation(data=>{clearTimeout(timer);data ? resolve(data) : reject(new Error('Consenti a Telegram di accedere alla posizione nelle impostazioni.'));});
+        if(!lm.isLocationAvailable) {clearTimeout(timer);reject(new Error('GPS non disponibile in Telegram.'));return;}
+        lm.getLocation(data=>{clearTimeout(timer);data ? resolve({latitude:data.latitude,longitude:data.longitude,accuracy:data.horizontal_accuracy}) : reject(new Error('Consenti a Telegram di accedere alla posizione nelle impostazioni.'));});
       };
       if(lm.isInited) get(); else lm.init(get);
     });
+    if(Number.isFinite(telegramFix.accuracy) && telegramFix.accuracy>0 && (!browserFix || telegramFix.accuracy<browserFix.accuracy))return telegramFix;
+    } catch {}
   }
-  return browserGPS();
+  if(browserFix)return browserFix;
+  throw new Error('Posizione precisa non disponibile. Abilita il GPS e la posizione precisa per Telegram, poi riprova all’aperto.');
 }
 $('gps').addEventListener('click',async()=>{
   busy=true;locks();status('Acquisizione della posizione…');
-  try { const p=await position();$('locator').value=locatorFromGPS(p.latitude,p.longitude);status('Locator acquisito. Puoi pubblicare lo SPOT.'); }
+  try {
+    const p=await position();
+    if(p.accuracy>100)throw new Error(`Posizione troppo imprecisa (±${Math.round(p.accuracy)} m). Locator non cambiato: riprova all’aperto o inseriscilo manualmente.`);
+    $('locator').value=locatorFromGPS(p.latitude,p.longitude);
+    $('gps-quality').textContent=`Precisione dichiarata: ±${Math.round(p.accuracy)} m. Controlla il locator se sei vicino al confine della zona.`;
+    status('Locator aggiornato con la posizione precisa.');
+  }
   catch(e) { status(e.message,true); }
   finally { busy=false;locks(); }
 });
@@ -163,7 +167,7 @@ $('spot-form').addEventListener('submit',async event=>{
     const input={callsign:$('callsign').value,band:$('band').value,mode:$('mode').value,frequency:$('frequency').value,locator:$('locator').value.trim(),activity,activity_name:$('activity-name').value,id:requestId};
     validateSpot(input);status('Pubblicazione in corso…');
     await api('/spots','POST',input);requestId=crypto.randomUUID();
-    await refresh();
+    await refresh();selectTab('list');
   } catch(e) { status(e.message || 'Connessione non riuscita. Riprova.',true); }
   finally { busy=false;locks(); }
 });

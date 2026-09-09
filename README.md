@@ -5,7 +5,8 @@ Telegram Mini App per i membri di [IQ1TO](https://t.me/IQ1TO), associata a **@IQ
 ## Funzioni
 
 - Verifica server della firma Telegram `initData` (scadenza un’ora) e appartenenza al gruppo con `getChatMember` a ogni richiesta. Riaprire l’app rinnova la sessione.
-- Nominativo, banda in metri, frequenza MHz, modo e locator Maidenhead a sei caratteri. GPS Telegram 8+ con fallback browser. Solo il locator lascia il dispositivo.
+- Due tab: QSO attivi (lista, QRT e direzione antenna) e Genera SPOT (profilo e modulo).
+- Nominativo, banda in metri, frequenza MHz, modo e locator Maidenhead a sei caratteri. GPS ad alta precisione con fallback Telegram 8+. Solo il locator lascia il dispositivo.
 - Una presenza attiva per utente; lista dei 200 SPOT più recenti; aggiornamento ogni 60 secondi a schermata visibile e pulsante manuale.
 - Pubblicazione nel topic dell’attività (vedi sotto); QRT riservato al proprietario e modifica del messaggio originale.
 - Idempotenza delle creazioni, cooldown di 60 secondi, query parametrizzate, limite payload, output testuale senza HTML utente.
@@ -19,7 +20,8 @@ Per gli aggiornamenti via GitHub lasciare il comando di deploy `npm run db:remot
 
 - Profili D1 associati all’ID Telegram autenticato: nominativo univoco, nome, locator predefinito e ruolo Admin. La migrazione 0002 registra 22699108 come IU1WWY / Antonio / JN35UC / Admin. Il ruolo non è modificabile dalle API del profilo. La registrazione non certifica il possesso della licenza.
 - Per chi non è registrato si apre il modulo profilo, senza impedire la pubblicazione. Nominativo e locator sono precompilati e modificabili per il singolo SPOT senza cambiare il profilo.
-- Banda a scorrimento e due selettori frequenza (MHz interi/decimali, passo ordinario 1 kHz e limiti di banda inclusi). Il campo frequenza esatta permette valori fino al singolo Hz.
+- Banda a rotella con un solo valore visibile, scorrimento verticale e frecce da tastiera. Frequenza in un unico controllo, con + sopra e − sotto ogni cifra (fino a 1 Hz). Ogni pulsante incrementa/decrementa la posizione decimale corrispondente con riporto; le operazioni fuori banda sono disabilitate.
+- Il GPS richiede `enableHighAccuracy: true` e `maximumAge: 0`, scarta fix vecchi oltre 10 secondi e cerca per massimo 25 secondi quello più preciso (si ferma subito entro 30 m). Se necessario prova anche il servizio Telegram, valutando `horizontal_accuracy`. Il locator viene sostituito solo con accuratezza dichiarata entro 100 m, visualizzata nel modulo; altrimenti resta modificabile manualmente. Nessun tracciamento continuo: il watch viene fermato a fine acquisizione. Anche una posizione precisa può cadere vicino al confine di un locator: la qualità effettiva dipende dal dispositivo, dai permessi e dal segnale GPS.
 - Attività SOTA/POTA nel topic 12, IAC nel topic 5, CONTEST o nessuna attività nel topic CQ Spot configurato. Nome/riferimento obbligatorio per ogni attività, salvato in maiuscolo come il nominativo. Il topic viene memorizzato alla creazione.
 - Messaggi HTML con grassetto e frequenza/locator monospazio. QRT modifica il messaggio originale.
 - Direzione antenna: azimut sul percorso corto tra i centri dei locator, dal nord geografico. Stesso locator: direzione indeterminata. Il pulsante Telegram apre `https://t.me/IQ1TObot?startapp=bearing_LOCATOR` per calcolare i gradi dal locator di chi legge; richiede la Main Mini App configurata in BotFather.
