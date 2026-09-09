@@ -14,6 +14,7 @@
 <main>
   <header><div><span class="eyebrow">IQ1TO</span><h1>CQ Spot<span class="signal" aria-hidden="true"> ◉</span></h1></div><a href="https://t.me/IQ1TO">Gruppo ↗</a></header>
   <p id="status" role="status" aria-live="polite">Connessione a Telegram…</p>
+  <section id="offline-locator" class="panel"><h2>Locator locale</h2><p class="hint">Funziona anche senza connessione: inserisci coordinate o usa il GPS del dispositivo.</p><div class="row"><label>Latitudine<input id="offline-lat" inputmode="decimal" placeholder="45.0703"></label><label>Longitudine<input id="offline-lon" inputmode="decimal" placeholder="7.6869"></label></div><div class="inline-field"><button id="offline-gps" type="button" class="secondary">Usa posizione GPS</button><button id="offline-calc" type="button">Determina LOC</button></div><output id="offline-result" class="offline-result" role="status"></output></section>
   <nav class="tabs" role="tablist" aria-label="CQ Spot">
     <button id="tab-list" type="button" role="tab" aria-selected="true" aria-controls="panel-list">QSO attivi</button>
     <button id="tab-create" type="button" role="tab" aria-selected="false" aria-controls="panel-create" tabindex="-1">Genera SPOT</button>
@@ -73,7 +74,7 @@
       <p class="hint">Inserisci il rapporto che assegni al segnale del corrispondente. Una conferma per account e SPOT.</p>
       <button type="submit">Conferma QSO · Salva QSL</button>
     </fieldset></form>
-    <div class="table-scroll"><table class="qsl-table"><caption id="qsl-total">Collegamenti confermati</caption><thead><tr><th>UTC</th><th>Nominativo</th><th>Locator</th><th>km*</th><th>RS/RST</th></tr></thead><tbody id="qsl-rows"></tbody></table></div>
+    <div class="table-scroll"><table class="qsl-table"><caption id="qsl-total">Collegamenti confermati</caption><thead><tr><th>UTC</th><th>Nominativo</th><th>Locator</th><th>km*</th><th>RS/RST</th><th></th></tr></thead><tbody id="qsl-rows"></tbody></table></div>
     <p class="hint">* Distanza tra LOC.</p><button id="qsl-more" class="secondary" type="button" hidden>Carica precedenti</button>
   </section>
   <section id="my-spot" class="panel" hidden aria-labelledby="my-title"><h2 id="my-title">I tuoi SPOT</h2><div id="my-details"></div></section>

@@ -21,6 +21,7 @@ function database() {
   const db=new DatabaseSync(':memory:');db.exec(readFileSync(new URL('../migrations/0001_spots.sql',import.meta.url),'utf8'));
   db.exec(readFileSync(new URL('../migrations/0002_profiles_activities.sql',import.meta.url),'utf8'));
   db.exec(readFileSync(new URL('../migrations/0003_dmr_qsl.sql',import.meta.url),'utf8'));
+  db.exec(readFileSync(new URL('../migrations/0004_qsl_delete.sql',import.meta.url),'utf8'));
   db.exec('PRAGMA foreign_keys=ON');
   return { prepare(sql) {
     const stmt=db.prepare(sql);let args=[];
@@ -244,6 +245,17 @@ test('QSL dates are compact and omit seconds',()=>{
   assert.equal(formatUtcLogDate(reference,reference),'12:34');
   assert.equal(formatUtcLogDate(reference-86400,reference),'08/09 12:34');
   assert.equal(formatUtcLogDate(Date.UTC(2025,8,9,12,34,56)/1000,reference),'09/09/2025 12:34');
+});
+test('QSL author can delete only own confirmation and deletion updates spot counters',async t=>{
+  const DB=database();t.after(()=>DB.close());
+  const spotId='a0000000-0000-4000-8000-000000000004';
+  await DB.prepare(`INSERT INTO spots(id,user_id,callsign,band,frequency_hz,mode,locator,created_at,qsl_count) VALUES(?,123,'IU1ABC','40',7100000,'Fonia','JN35UC',1,0)`).bind(spotId).run();
+  await DB.prepare(`INSERT INTO qsl_logs(spot_id,user_id,callsign,locator,report,occurred_at,recorded_at,distance_km) VALUES(?,456,'IU1XYZ','JN35UC','59',2,2,0)`).bind(spotId).run();
+  t.mock.method(globalThis,'fetch',async(url)=>Response.json({ok:true,result:url.endsWith('/getChatMember')?{status:'member'}:{message_id:42}}));
+  const pending=[];const env={DB,TELEGRAM_BOT_TOKEN:token,TELEGRAM_GROUP_ID:'@IQ1TO',TELEGRAM_TOPIC_ID:'8'},request=(user)=>worker.fetch(new Request(`https://spot.example/api/spots/${spotId}/logs/1`,{method:'DELETE',headers:{'X-Telegram-Init-Data':signed(user)}}),env,{waitUntil(p){pending.push(p);}});
+  assert.equal((await request(123)).status,404);assert.equal((await request(456)).status,200);
+  await Promise.all(pending);
+  const spot=await DB.prepare('SELECT qsl_count,revision,sync_state FROM spots WHERE id=?').bind(spotId).first();assert.equal(spot.qsl_count,0);assert.equal(spot.revision,2);assert.equal(spot.sync_state,'synced');
 });
 test('QSL during an in-flight Telegram edit keeps a pending revision',async t=>{
   const DB=database();t.after(()=>DB.close());

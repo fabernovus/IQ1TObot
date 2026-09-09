@@ -59,7 +59,7 @@ export function formatUtcLogDate(seconds, referenceSeconds=Math.floor(Date.now()
 export function validateQSL(input,spot,now=Math.floor(Date.now()/1000)) {
   if(!input || typeof input!=='object')throw new Error('Dati QSL non validi.');
   const profile=validateProfile({callsign:input.callsign,name:'QSL',default_locator:input.locator});
-  const report=String(input.report ?? '').trim();
+  const report=String(input.report ?? '').trim() || (spot.mode==='CW' ? '599' : '59');
   if(!(spot.mode==='CW' ? /^[1-5][1-9][1-9]$/ : /^[1-5][1-9]$/).test(report))throw new Error(spot.mode==='CW' ? 'Inserisci RST: R 1–5, S 1–9, T 1–9 (es. 599).' : 'Inserisci RS: R 1–5, S 1–9 (es. 59).');
   const occurred_at=input.occurred_at;
   if(!Number.isSafeInteger(occurred_at) || occurred_at<spot.created_at || occurred_at>now+60)throw new Error('L’orario UTC deve essere compreso tra l’inizio dello SPOT e adesso.');

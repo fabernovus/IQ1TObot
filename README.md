@@ -14,7 +14,7 @@ Telegram Mini App per i membri di [IQ1TO](https://t.me/IQ1TO), associata a **@IQ
 
 ## Configurazione Cloudflare
 
-Per gli aggiornamenti via GitHub lasciare il comando di deploy `npm run db:remote && npm run deploy`: applica tutte le migrazioni, compresa `0003_dmr_qsl.sql`, prima del codice. Non ricreare il database: gli SPOT e i profili esistenti vengono conservati.
+Per gli aggiornamenti via GitHub lasciare il comando di deploy `npm run db:remote && npm run deploy`: applica tutte le migrazioni, comprese `0003_dmr_qsl.sql` e `0004_qsl_delete.sql`, prima del codice. Non ricreare il database: gli SPOT e i profili esistenti vengono conservati.
 
 ### Profili, attività e direzione antenna
 
@@ -36,6 +36,9 @@ Per gli aggiornamenti via GitHub lasciare il comando di deploy `npm run db:remot
 - La distanza in km è calcolata sul server tra i centri dei locator con la formula di Haversine; per BM TG è una distanza geografica, non la tratta radio. Il log salva anche l’ora di registrazione sul server e resta associato allo SPOT dopo il QRT.
 - Il messaggio mostra gli ultimi 100 QSL e il totale per rientrare nei limiti dei rich message; la Mini App carica il log a pagine di 50 righe. Il pulsante Telegram `startapp=qsl_ID` apre anche il log di uno SPOT concluso. Il log aperto si aggiorna con la lista; se si stanno leggendo pagine precedenti, riaprire il log per tornare agli ultimi QSL.
 - Le date del QSL Log sono compatte e in UTC: stesso giorno `HH:MM`, altro giorno nello stesso anno `GG/MM HH:MM`, altro anno `GG/MM/AAAA HH:MM`; i secondi non vengono mostrati. Locator QSL e locator per l’azimut possono essere acquisiti con lo stesso GPS ad alta precisione del modulo SPOT. La direzione antenna non viene proposta per BM TG o per qualsiasi SPOT senza frequenza.
+- L’autore di una conferma QSL può eliminarla dalla Mini App; il contatore, il messaggio Telegram e la revisione dello SPOT vengono aggiornati. Il proprietario dello SPOT o altri utenti non possono cancellarla.
+- Il nominativo e locator QSL vengono completati server-side dal profilo associato se lasciati vuoti; il default del rapporto è `59` (o `599` per CW).
+- La Mini App registra un service worker per mantenere il pannello Locator locale: con asset già caricati, anche senza connessione è possibile calcolare il locator da coordinate manuali o GPS. Le API e la pubblicazione restano disabilitate offline.
 - QSL e QRT incrementano una revisione persistente: modifiche durante un invio Telegram non vengono perse. Il cron ritenta entro il normale intervallo di 5 minuti. I log sono eliminati in cascata quando lo SPOT viene rimosso dopo la conservazione di 30 giorni: questo è un registro di presenza, non un archivio permanente del log di stazione.
 
 Richiede Node.js 22.13+ e un account Cloudflare. Su PowerShell usare `npm.cmd` / `npx.cmd` se le policy bloccano gli script `.ps1`.

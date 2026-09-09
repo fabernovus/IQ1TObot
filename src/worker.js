@@ -76,6 +76,14 @@ async function handle(request,env,ctx) {
     ctx.waitUntil(syncSpot(env,input.id));
     return json({id:input.id},201);
   }
+  const qslDelete=url.pathname.match(/^\/api\/spots\/([0-9a-f-]{36})\/logs\/(\d+)$/i);
+  if(request.method==='DELETE' && qslDelete) {
+    const spot=await env.DB.prepare('SELECT id FROM spots WHERE id=?').bind(qslDelete[1]).first();
+    if(!spot)throw fail(404,'SPOT non trovato.');
+    const result=await env.DB.prepare('DELETE FROM qsl_logs WHERE id=? AND spot_id=? AND user_id=?').bind(Number(qslDelete[2]),spot.id,user.id).run();
+    if(!result.meta.changes)throw fail(404,'QSL non trovato o non sei il suo autore.');
+    ctx.waitUntil(syncSpot(env,spot.id));return json({ok:true});
+  }
   const logsMatch=url.pathname.match(/^\/api\/spots\/([0-9a-f-]{36})\/logs$/i);
   if(logsMatch && ['GET','POST'].includes(request.method)) {
     const spot=await env.DB.prepare('SELECT * FROM spots WHERE id=?').bind(logsMatch[1]).first();
@@ -84,7 +92,7 @@ async function handle(request,env,ctx) {
       const before=Number(url.searchParams.get('before') || Number.MAX_SAFE_INTEGER);
       if(!Number.isSafeInteger(before) || before<1)throw fail(400,'Pagina non valida.');
       const [logs,own]=await env.DB.batch([
-        env.DB.prepare('SELECT id,callsign,locator,report,occurred_at,distance_km FROM qsl_logs WHERE spot_id=? AND id<? ORDER BY id DESC LIMIT 51').bind(spot.id,before),
+        env.DB.prepare('SELECT id,callsign,locator,report,occurred_at,distance_km,(user_id=?) AS can_delete FROM qsl_logs WHERE spot_id=? AND id<? ORDER BY id DESC LIMIT 51').bind(user.id,spot.id,before),
         env.DB.prepare('SELECT id FROM qsl_logs WHERE spot_id=? AND user_id=?').bind(spot.id,user.id)
       ]);
       const rows=logs.results.slice(0,50);
@@ -93,7 +101,9 @@ async function handle(request,env,ctx) {
     if(spot.user_id===user.id)throw fail(403,'Il QSL deve essere registrato dal corrispondente.');
     if(spot.ended_at)throw fail(409,'Lo SPOT è già terminato.');
     let qsl;const input=await body(request);
-    try {qsl=validateQSL(input,spot);}catch(error){throw fail(400,error.message);}
+    const qslProfile=await env.DB.prepare('SELECT callsign,default_locator FROM profiles WHERE telegram_id=?').bind(user.id).first();
+    const qslInput={...input,callsign:(input.callsign == null ? '' : String(input.callsign)).trim() || qslProfile?.callsign,locator:(input.locator == null ? '' : String(input.locator)).trim() || qslProfile?.default_locator};
+    try {qsl=validateQSL(qslInput,spot);}catch(error){throw fail(400,error.message);}
     const result=await env.DB.prepare(`INSERT OR IGNORE INTO qsl_logs(spot_id,user_id,callsign,locator,report,occurred_at,recorded_at,distance_km)
       SELECT ?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM spots WHERE id=? AND ended_at IS NULL)`)
       .bind(spot.id,user.id,qsl.callsign,qsl.locator,qsl.report,qsl.occurred_at,now(),qsl.distance_km,spot.id).run();

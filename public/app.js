@@ -1,9 +1,10 @@
-import { BANDS, MODES, locatorFromGPS, validateSpot, validateProfile, validateQSL, formatFrequency, formatUtcLogDate, bearingBetween } from './radio.js';
+import { BANDS, MODES, locatorFromGPS, validateSpot, validateProfile, validateQSL, formatFrequency, formatUtcLogDate, bearingBetween, distanceBetween } from './radio.js';
 import { bandControl, frequencyControl } from './controls.js';
 import { preciseGPS } from './gps.js';
 const $ = id => document.getElementById(id);
 const tg = window.Telegram?.WebApp;
 const initData = tg?.initData;
+if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js').catch(()=>{});
 let mine = null, busy = false, loading = false, authenticated = false, profileLoaded = false, activity = '', bearingTarget = '';
 let requestId = crypto.randomUUID();
 let mineActive=[],qslTarget=null,qslNext=null,qslSequence=0,qslExpanded=false;
@@ -96,8 +97,9 @@ async function endSpot(id) {
 }
 function logRows(rows,append=false) {
   if(!append)$('qsl-rows').replaceChildren();
-  for(const log of rows){const row=document.createElement('tr');for(const value of [formatUtcLogDate(log.occurred_at),log.callsign,log.locator,Number(log.distance_km).toFixed(1),log.report]){const cell=document.createElement('td');cell.textContent=value;row.append(cell);}$('qsl-rows').append(row);}
+  for(const log of rows){const row=document.createElement('tr');for(const value of [formatUtcLogDate(log.occurred_at),log.callsign,log.locator,Number(log.distance_km).toFixed(1),log.report]){const cell=document.createElement('td');cell.textContent=value;row.append(cell);}if(log.can_delete){const cell=document.createElement('td');const button=document.createElement('button');button.type='button';button.className='text-button qsl-delete';button.textContent='Elimina';button.addEventListener('click',()=>deleteQSL(qslTarget.id,log.id));cell.append(button);row.append(cell);}$('qsl-rows').append(row);}
 }
+async function deleteQSL(spotId,logId){if(busy)return;if(!confirm('Eliminare questa conferma QSL?'))return;busy=true;locks();try{await api(`/spots/${spotId}/logs/${logId}`,'DELETE');await loadQSL(spotId);status('Conferma QSL eliminata. Aggiornamento del messaggio in corso…');}catch(error){$('qsl-status').textContent=error.message;}finally{busy=false;locks();}}
 async function loadQSL(id,append=false,initialize=false) {
   const sequence=++qslSequence;
   try {
@@ -114,7 +116,7 @@ async function loadQSL(id,append=false,initialize=false) {
       $('qsl-locator').value=$('locator').value || $('profile-locator').value;
       $('qsl-time').value=new Date().toISOString().slice(0,19);
       $('qsl-time').min=new Date(data.spot.created_at*1000).toISOString().slice(0,19);
-      $('qsl-report').value='';$('qsl-report').placeholder=data.spot.mode==='CW'?'Es. 599':'Es. 59';
+      $('qsl-report').value=data.spot.mode==='CW'?'599':'59';$('qsl-report').placeholder=data.spot.mode==='CW'?'Es. 599':'Es. 59';
       $('qsl-report').pattern=data.spot.mode==='CW'?'[1-5][1-9][1-9]':'[1-5][1-9]';
       $('report-label').textContent=`${data.spot.mode==='CW'?'RST':'RS'} del segnale della stazione ${data.spot.callsign}`;
     }
@@ -146,7 +148,8 @@ $('qsl-gps').addEventListener('click',()=>applyGPS('qsl-locator'));
 function calculateBearing() {
   try {
     const origin=$('bearing-origin').value.trim().toUpperCase(),angle=bearingBetween(origin,bearingTarget);
-    $('bearing-result').textContent=angle===null ? 'Stesso locator: direzione non determinabile.' : `${Math.round(angle)%360}° dal nord geografico · da ${origin} a ${bearingTarget}`;
+    const distance=distanceBetween(origin,bearingTarget);
+    $('bearing-result').textContent=angle===null ? `Stesso locator · distanza ${distance.toFixed(1)} km` : `${Math.round(angle)%360}° dal nord geografico · ${distance.toFixed(1)} km · da ${origin} a ${bearingTarget}`;
   } catch(error) { $('bearing-result').textContent=error.message; }
 }
 function showBearing(target,callsign='') {
@@ -221,6 +224,17 @@ async function position() {
   if(browserFix)return browserFix;
   throw new Error('Posizione precisa non disponibile. Abilita il GPS e la posizione precisa per Telegram, poi riprova all’aperto.');
 }
+function offlineLocator() {
+  try {
+    const latitude=Number($('offline-lat').value.replace(',','.')),longitude=Number($('offline-lon').value.replace(',','.'));
+    const result=locatorFromGPS(latitude,longitude);$('offline-result').textContent=result;
+  } catch(error) {$('offline-result').textContent=error.message;}
+}
+$('offline-calc').addEventListener('click',offlineLocator);
+$('offline-gps').addEventListener('click',async()=>{
+  try {const p=await position();$('offline-lat').value=p.latitude.toFixed(6);$('offline-lon').value=p.longitude.toFixed(6);offlineLocator();}
+  catch(error){$('offline-result').textContent=error.message;}
+});
 $('gps').addEventListener('click',async()=>{
   busy=true;locks();status('Acquisizione della posizione…');
   try {
