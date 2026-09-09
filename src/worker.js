@@ -20,7 +20,11 @@ async function body(request) {
 async function handle(request,env,ctx) {
   const url = new URL(request.url);
   if (!url.pathname.startsWith('/api/')) return env.ASSETS.fetch(request);
-  if (!env.TELEGRAM_BOT_TOKEN || !env.TELEGRAM_GROUP_ID || !/^[1-9]\d*$/.test(env.TELEGRAM_TOPIC_ID || '')) throw fail(503,'Il bot deve ancora essere configurato.');
+  const missing = [];
+  if (!env.TELEGRAM_BOT_TOKEN?.trim()) missing.push('TELEGRAM_BOT_TOKEN');
+  if (!env.TELEGRAM_GROUP_ID?.trim()) missing.push('TELEGRAM_GROUP_ID');
+  if (!/^[1-9]\d*$/.test(env.TELEGRAM_TOPIC_ID || '')) missing.push('TELEGRAM_TOPIC_ID (intero maggiore di zero)');
+  if (missing.length) throw fail(503,`Configurazione Worker incompleta: ${missing.join(', ')}. Contatta un amministratore.`);
   const origin = request.headers.get('Origin');
   if (origin && origin !== url.origin) throw fail(403,'Origine non consentita.');
   let user;
