@@ -4,7 +4,7 @@ import { createHmac } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
 import { verifyInitData } from '../src/auth.js';
-import { BANDS, locatorFromGPS, locatorCenter, validateSpot, validateProfile, validateQSL, distanceBetween, bearingBetween } from '../public/radio.js';
+import { BANDS, locatorFromGPS, locatorCenter, validateSpot, validateProfile, validateQSL, distanceBetween, formatUtcLogDate, bearingBetween } from '../public/radio.js';
 import { stepFrequency } from '../public/controls.js';
 import { preciseGPS } from '../public/gps.js';
 import { isMember, syncSpot, spotMessage, topicFor } from '../src/telegram.js';
@@ -238,6 +238,12 @@ test('QSL validation supports RS and geographical distance; rich logs have bound
   assert.ok(distanceBetween('JJ00AA','JJ01AA')>110 && distanceBetween('JJ00AA','JJ01AA')<112);
   const html=spotMessage(spot,Array.from({length:101},()=>({...log,callsign:'A1AAAAAAAAAAAAAAAAAA'})));
   assert.ok(html.includes('Ultimi 100 QSL'));assert.ok(html.length<32768);assert.equal((html.match(/A1AAAAAAAAAAAAAAAAAA/g)||[]).length,100);
+});
+test('QSL dates are compact and omit seconds',()=>{
+  const reference=Date.UTC(2026,8,9,12,34,56)/1000;
+  assert.equal(formatUtcLogDate(reference,reference),'12:34');
+  assert.equal(formatUtcLogDate(reference-86400,reference),'08/09 12:34');
+  assert.equal(formatUtcLogDate(Date.UTC(2025,8,9,12,34,56)/1000,reference),'09/09/2025 12:34');
 });
 test('QSL during an in-flight Telegram edit keeps a pending revision',async t=>{
   const DB=database();t.after(()=>DB.close());

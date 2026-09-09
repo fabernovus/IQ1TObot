@@ -48,6 +48,14 @@ export function distanceBetween(from,to) {
   const h=Math.sin((b.latitude-a.latitude)*r/2)**2+Math.cos(a.latitude*r)*Math.cos(b.latitude*r)*Math.sin((b.longitude-a.longitude)*r/2)**2;
   return Math.round(6371.0088*2*Math.asin(Math.sqrt(Math.min(1,h)))*10)/10;
 }
+export function formatUtcLogDate(seconds, referenceSeconds=Math.floor(Date.now()/1000)) {
+  const date=new Date(seconds*1000), reference=new Date(referenceSeconds*1000);
+  const time=new Intl.DateTimeFormat('it-IT',{timeZone:'UTC',hour:'2-digit',minute:'2-digit'}).format(date);
+  const sameDay=date.getUTCFullYear()===reference.getUTCFullYear() && date.getUTCMonth()===reference.getUTCMonth() && date.getUTCDate()===reference.getUTCDate();
+  if(sameDay)return time;
+  const datePart=new Intl.DateTimeFormat('it-IT',{timeZone:'UTC',day:'2-digit',month:'2-digit',year:date.getUTCFullYear()===reference.getUTCFullYear()?undefined:'numeric'}).format(date);
+  return `${datePart} ${time}`;
+}
 export function validateQSL(input,spot,now=Math.floor(Date.now()/1000)) {
   if(!input || typeof input!=='object')throw new Error('Dati QSL non validi.');
   const profile=validateProfile({callsign:input.callsign,name:'QSL',default_locator:input.locator});

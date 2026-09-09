@@ -1,4 +1,4 @@
-import { formatFrequency } from '../public/radio.js';
+import { formatFrequency, formatUtcLogDate } from '../public/radio.js';
 export async function telegram(env, method, payload) {
   let response;
   try {
@@ -25,7 +25,7 @@ export function isMember(member) {
   return ['creator','administrator','member'].includes(member.status) || (member.status === 'restricted' && member.is_member === true);
 }
 export function spotMessage(spot,logs=[]) {
-  const utc=seconds=>new Date(seconds*1000).toISOString().replace('T',' ').slice(0,19);
+  const utc=seconds=>formatUtcLogDate(seconds);
   const row=(label,value)=>`<tr><th>${label}</th><td>${escapeHTML(value)}</td></tr>`;
   const network=spot.mode==='DMR' && spot.dmr_type==='bm';
   const info=network ? row('Rete','BrandMeister')+row('Talkgroup',spot.talkgroup) : row('Banda',`${spot.band} m`)+row('Frequenza',`${formatFrequency(spot.frequency_hz)} MHz`);
@@ -35,9 +35,9 @@ export function spotMessage(spot,logs=[]) {
     `<table bordered compact>${info}${row('Modo',spot.mode+(spot.dmr_type==='direct'?' · Diretto':''))}${row('Locator',spot.locator)}${spot.activity?row(spot.activity,spot.activity_name):''}</table>`+
     (spot.notes?`<h3>Note</h3><blockquote>${escapeHTML(spot.notes).replace(/\n/g,'<br>')}</blockquote>`:'')+
     `<h3>QSL Log · ${spot.qsl_count || 0}</h3>`+
-    (logs.length?`<table bordered striped compact><tr><th>Data/ora UTC</th><th>Nominativo</th><th>Locator</th><th>km</th><th>${report}</th></tr>${logRows}</table>`:'<p>Nessun QSO confermato.</p>')+
+    (logs.length?`<table bordered striped compact><tr><th>Data/ora UTC</th><th>Nominativo</th><th>Locator</th><th>km*</th><th>${report}</th></tr>${logRows}</table>`:'<p>Nessun QSO confermato.</p>')+
     (spot.qsl_count>100?'<p>Ultimi 100 QSL. Log completo nella Mini App.</p>':'')+
-    `<p><i>Distanze geografiche tra i centri dei locator${network?', non distanze della tratta radio BrandMeister':''}. Rapporti ${report} assegnati dai corrispondenti alla stazione dello SPOT.</i></p>`+
+    `<p><i>* Distanza tra LOC</i></p>`+
     `<footer>${spot.ended_at?'Terminato':'In radio'}: ${utc(spot.ended_at || spot.created_at)} UTC</footer>`;
 }
 const escapeHTML = value => String(value ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -53,7 +53,7 @@ export async function syncSpot(env, id) {
       chat_id: env.TELEGRAM_GROUP_ID,
       ...(spot.message_id ? { message_id: spot.message_id } : { message_thread_id: spot.topic_id ?? topicFor(spot.activity,env) }),
       rich_message:{html:spotMessage(spot,logs.results),skip_entity_detection:true},
-      reply_markup:{inline_keyboard:[...(spot.ended_at ? [] : [[{text:'🧭 Direzione antenna',url:`https://t.me/IQ1TObot?startapp=bearing_${spot.locator}`}]]),[{text:spot.ended_at?'📒 QSL Log':'📒 QSL Log · Conferma QSO',url:`https://t.me/IQ1TObot?startapp=qsl_${spot.id}`}]]}
+      reply_markup:{inline_keyboard:[...(spot.ended_at || !spot.frequency_hz ? [] : [[{text:'🧭 Direzione antenna',url:`https://t.me/IQ1TObot?startapp=bearing_${spot.locator}`}]]),[{text:spot.ended_at?'📒 QSL Log':'📒 QSL Log · Conferma QSO',url:`https://t.me/IQ1TObot?startapp=qsl_${spot.id}`}]]}
     });
     // A QRT may have happened while sendMessage was in flight: preserve its pending edit.
     await env.DB.prepare(`UPDATE spots SET message_id=COALESCE(message_id,?),

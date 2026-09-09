@@ -1,4 +1,4 @@
-import { BANDS, MODES, locatorFromGPS, validateSpot, validateProfile, validateQSL, formatFrequency, bearingBetween } from './radio.js';
+import { BANDS, MODES, locatorFromGPS, validateSpot, validateProfile, validateQSL, formatFrequency, formatUtcLogDate, bearingBetween } from './radio.js';
 import { bandControl, frequencyControl } from './controls.js';
 import { preciseGPS } from './gps.js';
 const $ = id => document.getElementById(id);
@@ -84,7 +84,7 @@ function card(spot,own=false) {
   el.append(top,freq,meta);
   if(spot.activity) {const tag=document.createElement('p');tag.className='hint';tag.textContent=`${spot.activity} · ${spot.activity_name}`;el.append(tag);}
   if(spot.notes){const note=document.createElement('p');note.className='spot-notes';note.textContent=spot.notes;el.append(note);}
-  if(!own) {const button=document.createElement('button');button.type='button';button.className='text-button';button.textContent='🧭 Direzione antenna';button.addEventListener('click',()=>showBearing(spot.locator,spot.callsign));el.append(button);}
+  if(!own && spot.frequency_hz>0) {const button=document.createElement('button');button.type='button';button.className='text-button';button.textContent='🧭 Direzione antenna';button.addEventListener('click',()=>showBearing(spot.locator,spot.callsign));el.append(button);}
   const logButton=document.createElement('button');logButton.type='button';logButton.className='text-button';logButton.textContent=`📒 QSL Log (${spot.qsl_count || 0})${own?'':' · Conferma QSO'}`;
   logButton.addEventListener('click',()=>openQSL(spot.id));el.append(logButton);
   if(own){const qrt=document.createElement('button');qrt.type='button';qrt.className='danger';qrt.dataset.qrt=spot.id;qrt.textContent='QRT · Termina questo SPOT';qrt.addEventListener('click',()=>endSpot(spot.id));el.append(qrt);}
@@ -96,7 +96,7 @@ async function endSpot(id) {
 }
 function logRows(rows,append=false) {
   if(!append)$('qsl-rows').replaceChildren();
-  for(const log of rows){const row=document.createElement('tr');for(const value of [new Date(log.occurred_at*1000).toISOString().replace('T',' ').slice(0,19),log.callsign,log.locator,Number(log.distance_km).toFixed(1),log.report]){const cell=document.createElement('td');cell.textContent=value;row.append(cell);}$('qsl-rows').append(row);}
+  for(const log of rows){const row=document.createElement('tr');for(const value of [formatUtcLogDate(log.occurred_at),log.callsign,log.locator,Number(log.distance_km).toFixed(1),log.report]){const cell=document.createElement('td');cell.textContent=value;row.append(cell);}$('qsl-rows').append(row);}
 }
 async function loadQSL(id,append=false,initialize=false) {
   const sequence=++qslSequence;
@@ -137,6 +137,12 @@ $('qsl-form').addEventListener('submit',async event=>{
     if(qslTarget?.id===target.id){qslExpanded=false;await loadQSL(target.id);}await refresh(true);status('QSL registrato. Aggiornamento del messaggio Telegram in corso…');
   } catch(error){$('qsl-status').textContent=error.message;}finally{busy=false;locks();}
 });
+async function applyGPS(targetId, qualityId) {
+  if(busy)return;busy=true;locks();status('Acquisizione della posizione precisa…');
+  try {const p=await position();if(p.accuracy>100)throw new Error(`Posizione troppo imprecisa (±${Math.round(p.accuracy)} m). Riprova all’aperto.`);$(targetId).value=locatorFromGPS(p.latitude,p.longitude);if(qualityId)$(qualityId).textContent=`GPS ±${Math.round(p.accuracy)} m`;status('Locator aggiornato dalla posizione precisa.');}
+  catch(error){status(error.message,true);}finally{busy=false;locks();}
+}
+$('qsl-gps').addEventListener('click',()=>applyGPS('qsl-locator'));
 function calculateBearing() {
   try {
     const origin=$('bearing-origin').value.trim().toUpperCase(),angle=bearingBetween(origin,bearingTarget);
@@ -150,6 +156,7 @@ function showBearing(target,callsign='') {
   $('bearing-origin').value=$('locator').value || mine?.locator || $('profile-locator').value;
   calculateBearing();$('bearing-panel').scrollIntoView({behavior:'smooth',block:'center'});
 }
+$('bearing-gps').addEventListener('click',()=>applyGPS('bearing-origin'));
 $('bearing-calculate').addEventListener('click',calculateBearing);
 $('profile-form').addEventListener('submit',async event=>{
   event.preventDefault();if(busy)return;busy=true;locks();
