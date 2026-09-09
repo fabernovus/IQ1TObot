@@ -1,5 +1,5 @@
 import { verifyInitData } from './auth.js';
-import { validateSpot, validateProfile } from '../public/radio.js';
+import { validateSpot, validateProfile, validateQSL } from '../public/radio.js';
 import { isMember, syncSpot, telegram, topicFor } from './telegram.js';
 const json = (value, status=200) => Response.json(value, { status, headers: { 'Cache-Control':'no-store', 'X-Content-Type-Options':'nosniff' } });
 const fail = (status,message) => Object.assign(new Error(message),{status});
@@ -38,12 +38,14 @@ async function handle(request,env,ctx) {
     throw fail(503,'Database non collegato: configura il binding D1 chiamato DB nel Worker.');
   }
   if (request.method === 'GET' && url.pathname === '/api/spots') {
-    const [active,mine,profile] = await env.DB.batch([
-      env.DB.prepare(`SELECT id,callsign,band,frequency_hz,mode,locator,created_at,activity,activity_name FROM spots WHERE ended_at IS NULL ORDER BY created_at DESC LIMIT 200`),
-      env.DB.prepare(`SELECT id,callsign,band,frequency_hz,mode,locator,created_at,ended_at,sync_state,activity,activity_name FROM spots WHERE user_id=? ORDER BY created_at DESC LIMIT 1`).bind(user.id),
-      env.DB.prepare('SELECT callsign,name,default_locator,is_admin FROM profiles WHERE telegram_id=?').bind(user.id)
+    const fields='id,callsign,band,frequency_hz,mode,locator,created_at,ended_at,sync_state,activity,activity_name,dmr_type,talkgroup,notes,qsl_count';
+    const [active,mine,profile,mineActive] = await env.DB.batch([
+      env.DB.prepare(`SELECT ${fields}, user_id=? AS is_owner FROM spots WHERE ended_at IS NULL ORDER BY created_at DESC LIMIT 200`).bind(user.id),
+      env.DB.prepare(`SELECT ${fields} FROM spots WHERE user_id=? ORDER BY created_at DESC LIMIT 1`).bind(user.id),
+      env.DB.prepare('SELECT callsign,name,default_locator,is_admin FROM profiles WHERE telegram_id=?').bind(user.id),
+      env.DB.prepare(`SELECT ${fields} FROM spots WHERE user_id=? AND ended_at IS NULL ORDER BY created_at DESC LIMIT 3`).bind(user.id)
     ]);
-    return json({ spots:active.results, mine:mine.results[0] || null, profile:profile.results[0] || null });
+    return json({ spots:active.results, mine:mine.results[0] || null, mine_active:mineActive.results, profile:profile.results[0] || null });
   }
   if (request.method === 'PUT' && url.pathname === '/api/profile') {
     let profile;
@@ -67,19 +69,42 @@ async function handle(request,env,ctx) {
     const previous = await env.DB.prepare('SELECT id FROM spots WHERE id=? AND user_id=?').bind(input.id,user.id).first();
     if (previous) return json({id:previous.id},200);
     const time = now();
-    // Atomic cooldown plus unique partial index protects simultaneous requests.
-    const result = await env.DB.prepare(`INSERT OR IGNORE INTO spots(id,user_id,callsign,band,frequency_hz,mode,locator,created_at,activity,activity_name,topic_id)
-      SELECT ?,?,?,?,?,?,?,?,?,?,? WHERE NOT EXISTS(SELECT 1 FROM spots WHERE user_id=? AND created_at>?)`)
-      .bind(input.id,user.id,spot.callsign,spot.band,spot.frequency_hz,spot.mode,spot.locator,time,spot.activity,spot.activity_name,topicFor(spot.activity,env),user.id,time-60).run();
-    if (!result.meta.changes) throw fail(409,'Hai già uno SPOT attivo oppure ne hai pubblicato uno nell’ultimo minuto.');
+    const result = await env.DB.prepare(`INSERT OR IGNORE INTO spots(id,user_id,callsign,band,frequency_hz,mode,locator,created_at,activity,activity_name,topic_id,dmr_type,talkgroup,notes)
+      SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,? WHERE (SELECT COUNT(*) FROM spots WHERE user_id=? AND ended_at IS NULL)<3`)
+      .bind(input.id,user.id,spot.callsign,spot.band,spot.frequency_hz,spot.mode,spot.locator,time,spot.activity,spot.activity_name,topicFor(spot.activity,env),spot.dmr_type,spot.talkgroup,spot.notes,user.id).run();
+    if (!result.meta.changes) throw fail(409,'Puoi avere al massimo 3 SPOT attivi. Chiudine uno con QRT.');
     ctx.waitUntil(syncSpot(env,input.id));
     return json({id:input.id},201);
+  }
+  const logsMatch=url.pathname.match(/^\/api\/spots\/([0-9a-f-]{36})\/logs$/i);
+  if(logsMatch && ['GET','POST'].includes(request.method)) {
+    const spot=await env.DB.prepare('SELECT * FROM spots WHERE id=?').bind(logsMatch[1]).first();
+    if(!spot)throw fail(404,'SPOT non trovato.');
+    if(request.method==='GET') {
+      const before=Number(url.searchParams.get('before') || Number.MAX_SAFE_INTEGER);
+      if(!Number.isSafeInteger(before) || before<1)throw fail(400,'Pagina non valida.');
+      const [logs,own]=await env.DB.batch([
+        env.DB.prepare('SELECT id,callsign,locator,report,occurred_at,distance_km FROM qsl_logs WHERE spot_id=? AND id<? ORDER BY id DESC LIMIT 51').bind(spot.id,before),
+        env.DB.prepare('SELECT id FROM qsl_logs WHERE spot_id=? AND user_id=?').bind(spot.id,user.id)
+      ]);
+      const rows=logs.results.slice(0,50);
+      return json({logs:rows,next:logs.results.length>50?rows.at(-1).id:null,total:spot.qsl_count,can_log:!spot.ended_at && spot.user_id!==user.id && !own.results.length,spot:{id:spot.id,callsign:spot.callsign,locator:spot.locator,mode:spot.mode,dmr_type:spot.dmr_type,talkgroup:spot.talkgroup,frequency_hz:spot.frequency_hz,created_at:spot.created_at}});
+    }
+    if(spot.user_id===user.id)throw fail(403,'Il QSL deve essere registrato dal corrispondente.');
+    if(spot.ended_at)throw fail(409,'Lo SPOT è già terminato.');
+    let qsl;const input=await body(request);
+    try {qsl=validateQSL(input,spot);}catch(error){throw fail(400,error.message);}
+    const result=await env.DB.prepare(`INSERT OR IGNORE INTO qsl_logs(spot_id,user_id,callsign,locator,report,occurred_at,recorded_at,distance_km)
+      SELECT ?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM spots WHERE id=? AND ended_at IS NULL)`)
+      .bind(spot.id,user.id,qsl.callsign,qsl.locator,qsl.report,qsl.occurred_at,now(),qsl.distance_km,spot.id).run();
+    if(!result.meta.changes)throw fail(409,'Hai già registrato il QSL per questo SPOT oppure lo SPOT è terminato.');
+    ctx.waitUntil(syncSpot(env,spot.id));return json({ok:true},201);
   }
   const match = url.pathname.match(/^\/api\/spots\/([0-9a-f-]{36})\/qrt$/i);
   if (request.method === 'POST' && match) {
     const owned = await env.DB.prepare('SELECT id FROM spots WHERE id=? AND user_id=?').bind(match[1],user.id).first();
     if (!owned) throw fail(404,'SPOT non trovato.');
-    await env.DB.prepare(`UPDATE spots SET ended_at=?, sync_state=CASE WHEN sync_state='sending' THEN 'sending' ELSE 'pending' END,
+    await env.DB.prepare(`UPDATE spots SET ended_at=?, revision=revision+1, sync_state=CASE WHEN sync_state='sending' THEN 'sending' ELSE 'pending' END,
       sync_after=0, sync_attempts=0 WHERE id=? AND user_id=? AND ended_at IS NULL`).bind(now(),match[1],user.id).run();
     ctx.waitUntil(syncSpot(env,match[1]));
     return json({ok:true});
@@ -93,9 +118,10 @@ export default {
       if (error.status) return json({error:error.message},error.status);
       // Classify known failures without exposing raw SQL, credentials or request data.
       const detail = [error.message,error.cause?.message].filter(Boolean).join(' ');
-      if (/no such table:\s*(spots|profiles)\b/i.test(detail)) {
+      if (/no such table:\s*(spots|profiles|qsl_logs)\b/i.test(detail)) {
         return json({error:'Database non inizializzato: applica le migrazioni D1 sul database remoto.'},503);
       }
+      if(/max_active_spots/.test(detail))return json({error:'Puoi avere al massimo 3 SPOT attivi.'},409);
       if (/no such column\b|has no column named\b/i.test(detail)) {
         return json({error:'Database da aggiornare: applica le migrazioni D1 sul database remoto.'},503);
       }

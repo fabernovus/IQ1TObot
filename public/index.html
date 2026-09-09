@@ -28,20 +28,27 @@
       <button type="submit">Salva profilo</button>
     </fieldset></form>
   </details>
-  <section id="already-active" class="panel" hidden><p>Hai già uno SPOT attivo. Termina l’attività con QRT prima di pubblicarne un altro.</p><button id="show-active" type="button">Vai al tuo SPOT</button></section>
+  <section id="already-active" class="panel" hidden><p>Hai già 3 SPOT attivi. Chiudine uno con QRT prima di pubblicarne un altro.</p><button id="show-active" type="button">Vai ai tuoi SPOT</button></section>
   <section id="composer" class="panel" aria-labelledby="new-title">
     <h2 id="new-title">Vai in radio</h2>
+    <p id="spot-slots" class="hint">Fino a 3 SPOT attivi contemporaneamente.</p>
     <form id="spot-form">
       <fieldset id="fields" disabled>
         <label>Nominativo<input name="callsign" id="callsign" placeholder="Es. IU1ABC" required maxlength="20" autocomplete="off" autocapitalize="characters" spellcheck="false"></label>
-        <div class="row"><div><span id="band-label" class="field-label">Banda</span><input id="band" name="band" type="hidden" value="40"><div id="band-wheel" class="band-wheel" role="spinbutton" aria-labelledby="band-label" aria-valuemin="0" aria-valuemax="17" aria-disabled="true" tabindex="-1"></div><p class="hint">Scorri ↕ per cambiare</p></div><label>Modo<select name="mode" id="mode"></select></label></div>
+        <label>Modo<select name="mode" id="mode"></select></label>
+        <label id="dmr-choice" hidden>Collegamento DMR<select id="dmr-type"><option value="">Scegli…</option value="direct">Diretto · con frequenza</option><option value="bm">BM TG · BrandMeister</option></select></label>
+        <label id="tg-choice" hidden>Talkgroup BrandMeister<input id="talkgroup" inputmode="numeric" pattern="[1-9][0-9]{0,7}" maxlength="8" placeholder="Es. 222"></label>
+        <div id="radio-fields">
+        <div><span id="band-label" class="field-label">Banda</span><input id="band" name="band" type="hidden" value="40"><div id="band-wheel" class="band-wheel" role="spinbutton" aria-labelledby="band-label" aria-valuemin="0" aria-valuemax="17" aria-disabled="true" tabindex="-1"></div><p class="hint">Scorri ↕ per cambiare</p></div>
         <span class="field-label">Frequenza · MHz</span><input id="frequency" name="frequency" type="hidden">
         <div id="frequency-control" class="frequency-control" role="group" aria-describedby="frequency-hint"></div>
         <p id="frequency-hint" class="hint"></p>
+        </div>
         <span class="label">Attività</span><div id="activities" class="activities" role="group" aria-label="Attività dello SPOT">
           <button type="button" data-activity="" aria-pressed="true">Nessuna</button><button type="button" data-activity="SOTA" aria-pressed="false">SOTA</button><button type="button" data-activity="POTA" aria-pressed="false">POTA</button><button type="button" data-activity="IAC" aria-pressed="false">IAC</button><button type="button" data-activity="CONTEST" aria-pressed="false">CONTEST</button>
         </div>
         <label id="activity-label" hidden>Nome / riferimento attività<input id="activity-name" maxlength="80" autocapitalize="characters" spellcheck="false"></label>
+        <label>Note <span class="muted">facoltative</span><textarea id="notes" maxlength="500" rows="3" placeholder="Antenna, potenza, condizioni operative…"></textarea></label>
         <div class="location"><label>Locator<input id="locator" maxlength="6" required pattern="[A-Ra-r]{2}[0-9]{2}[A-Xa-x]{2}" placeholder="JN35UC" autocapitalize="characters" spellcheck="false"></label><button id="gps" type="button" class="secondary">Usa posizione</button></div>
         <p id="gps-quality" class="hint" role="status"></p>
         <p class="hint">Condividi solo il locator, una zona di pochi km. Le coordinate precise restano sul dispositivo.</p>
@@ -56,7 +63,20 @@
     <button id="bearing-calculate" type="button">Calcola direzione</button><p id="bearing-result" role="status"></p>
     <p class="hint">Azimut dal nord geografico, percorso corto tra i centri dei locator. 0° N · 90° E · 180° S · 270° O.</p>
   </section>
-  <section id="my-spot" class="panel" hidden aria-labelledby="my-title"><h2 id="my-title">Sei in radio</h2><div id="my-details"></div><button id="qrt" class="danger">QRT · Termina attività</button></section>
+  <section id="qsl-panel" class="panel" hidden aria-labelledby="qsl-title"><div class="section-head"><h2 id="qsl-title">QSL Log</h2><button id="qsl-close" type="button" class="text-button">Chiudi</button></div>
+    <p id="qsl-target"></p><p id="qsl-status" role="status"></p>
+    <form id="qsl-form" hidden><fieldset id="qsl-fields" disabled>
+      <label>Il tuo nominativo<input id="qsl-callsign" required maxlength="20" autocapitalize="characters" spellcheck="false"></label>
+      <label>Locator da cui hai effettuato il QSO<input id="qsl-locator" required maxlength="6" pattern="[A-Ra-r]{2}[0-9]{2}[A-Xa-x]{2}" autocapitalize="characters" spellcheck="false"></label>
+      <label>Data e ora del QSO · UTC<input id="qsl-time" type="datetime-local" step="1" required></label>
+      <label><span id="report-label">RS ricevuto dalla stazione dello SPOT</span><input id="qsl-report" required inputmode="numeric" maxlength="3" placeholder="Es. 59"></label>
+      <p class="hint">Inserisci il rapporto che assegni al segnale del corrispondente. Una conferma per account e SPOT.</p>
+      <button type="submit">Conferma QSO · Salva QSL</button>
+    </fieldset></form>
+    <div class="table-scroll"><table class="qsl-table"><caption id="qsl-total">Collegamenti confermati</caption><thead><tr><th>UTC</th><th>Nominativo</th><th>Locator</th><th>km</th><th>RS/RST</th></tr></thead><tbody id="qsl-rows"></tbody></table></div>
+    <p class="hint">Distanza geografica tra i centri dei locator; su BM TG non rappresenta la tratta radio.</p><button id="qsl-more" class="secondary" type="button" hidden>Carica precedenti</button>
+  </section>
+  <section id="my-spot" class="panel" hidden aria-labelledby="my-title"><h2 id="my-title">I tuoi SPOT</h2><div id="my-details"></div></section>
   <section aria-labelledby="spots-title"><div class="section-head"><h2 id="spots-title">In radio <span id="count" class="count">0</span></h2><button id="refresh" class="text-button" disabled>Aggiorna ↻</button></div><p id="updated" class="hint">SPOT attivi del gruppo</p><div id="spots"><p class="empty">Gli SPOT appariranno qui dopo l’accesso.</p></div></section>
   </div>
   <footer>73 de IQ1TO · CQ Spot</footer>

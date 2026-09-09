@@ -4,7 +4,7 @@ import { createHmac } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
 import { verifyInitData } from '../src/auth.js';
-import { BANDS, locatorFromGPS, locatorCenter, validateSpot, validateProfile, bearingBetween } from '../public/radio.js';
+import { BANDS, locatorFromGPS, locatorCenter, validateSpot, validateProfile, validateQSL, distanceBetween, bearingBetween } from '../public/radio.js';
 import { stepFrequency } from '../public/controls.js';
 import { preciseGPS } from '../public/gps.js';
 import { isMember, syncSpot, spotMessage, topicFor } from '../src/telegram.js';
@@ -20,6 +20,8 @@ const input={id:'c8006325-6077-4d30-854b-e33b89fe744f',callsign:'iu1abc/p',band:
 function database() {
   const db=new DatabaseSync(':memory:');db.exec(readFileSync(new URL('../migrations/0001_spots.sql',import.meta.url),'utf8'));
   db.exec(readFileSync(new URL('../migrations/0002_profiles_activities.sql',import.meta.url),'utf8'));
+  db.exec(readFileSync(new URL('../migrations/0003_dmr_qsl.sql',import.meta.url),'utf8'));
+  db.exec('PRAGMA foreign_keys=ON');
   return { prepare(sql) {
     const stmt=db.prepare(sql);let args=[];
     const wrapper={bind(...values){args=values;return wrapper;},async first(){return stmt.get(...args) || null;},async all(){return {results:stmt.all(...args)};},async run(){const r=stmt.run(...args);return {meta:{changes:Number(r.changes)}};}};return wrapper;
@@ -141,7 +143,7 @@ test('new activity spots persist their topic and send HTML with antenna link',as
     const result=await worker.fetch(new Request('https://spot.example/api/spots',{method:'POST',headers:{'X-Telegram-Init-Data':signed(100+i),'Content-Type':'application/json'},body:JSON.stringify({...input,id,activity,activity_name:'test'})}),env,{waitUntil(p){pending.push(p);}});
     assert.equal(result.status,201);await Promise.all(pending);
     const spot=await DB.prepare('SELECT * FROM spots WHERE id=?').bind(id).first();
-    assert.equal(spot.topic_id,topicFor(activity,env));assert.equal(sent[i].message_thread_id,spot.topic_id);assert.equal(sent[i].parse_mode,'HTML');
+    assert.equal(spot.topic_id,topicFor(activity,env));assert.equal(sent[i].message_thread_id,spot.topic_id);assert.ok(sent[i].rich_message.html.includes('<table'));
     assert.ok(sent[i].reply_markup.inline_keyboard[0][0].url.endsWith('startapp=bearing_JN35TA'));
   }
 });
@@ -157,14 +159,13 @@ test('authenticated create/list, idempotency, ownership, QRT and Telegram sync',
   const flush=async()=>{await Promise.all(pending);pending=[];};
   const request=(path,method='GET',payload,user=123)=>worker.fetch(new Request('https://spot.example/api'+path,{method,headers:{'X-Telegram-Init-Data':signed(user),'Content-Type':'application/json'},body:payload?JSON.stringify(payload):undefined}),env,ctx);
   const created=await request('/spots','POST',input);assert.equal(created.status,201);await flush();
-  assert.equal(calls.find(c=>c.method==='sendMessage').body.message_thread_id,123);
+  assert.equal(calls.find(c=>c.method==='sendRichMessage').body.message_thread_id,123);
   assert.equal((await request('/spots','POST',input)).status,200);await flush();
-  assert.equal(calls.filter(c=>c.method==='sendMessage').length,1);
-  assert.equal((await request('/spots','POST',{...input,id:crypto.randomUUID()})).status,409);
+  assert.equal(calls.filter(c=>c.method==='sendRichMessage').length,1);
   const list=await (await request('/spots')).json();assert.equal(list.spots.length,1);assert.equal(list.mine.callsign,'IU1ABC/P');assert.equal(list.mine.sync_state,'synced');
   assert.equal((await request(`/spots/${input.id}/qrt`,'POST',undefined,456)).status,404);
   assert.equal((await request(`/spots/${input.id}/qrt`,'POST')).status,200);await flush();
-  assert.ok(calls.find(c=>c.method==='editMessageText').body.text.includes('QRT'));
+  assert.ok(calls.find(c=>c.method==='editMessageText').body.rich_message.html.includes('QRT'));
   assert.equal((await (await request('/spots')).json()).spots.length,0);
   memberStatus='left';assert.equal((await request('/spots')).status,403);
   const unauth=await worker.fetch(new Request('https://spot.example/api/spots'),env,ctx);assert.equal(unauth.status,401);
@@ -183,6 +184,70 @@ test('failed delivery persists, retries; QRT during send schedules an edit',asyn
   await syncSpot(env,'race');let row=await DB.prepare("SELECT * FROM spots WHERE id='race'").first();assert.equal(row.message_id,99);assert.equal(row.sync_state,'pending');
   let edit;
   globalThis.fetch=async(url,options)=>{edit={url,body:JSON.parse(options.body)};return Response.json({ok:true,result:true});};
-  await syncSpot(env,'race');assert.ok(edit.url.endsWith('/editMessageText'));assert.ok(edit.body.text.includes('QRT'));
+  await syncSpot(env,'race');assert.ok(edit.url.endsWith('/editMessageText'));assert.ok(edit.body.rich_message.html.includes('QRT'));
   row=await DB.prepare("SELECT * FROM spots WHERE id='race'").first();assert.equal(row.sync_state,'synced');
+});
+test('DMR requires transport, BM omits RF data, direct requires valid frequency; notes bounded',()=>{
+  assert.throws(()=>validateSpot({...input,mode:'DMR'}),/Scegli/);
+  assert.throws(()=>validateSpot({...input,mode:'DMR',dmr_type:'direct',frequency:''}),/Frequenza/);
+  const bm=validateSpot({...input,mode:'DMR',dmr_type:'bm',frequency:undefined,band:undefined,talkgroup:'222',notes:'Antenna & <test>\nSeconda riga'});
+  assert.equal(bm.frequency_hz,0);assert.equal(bm.band,'');assert.equal(bm.talkgroup,222);
+  for(const talkgroup of ['0','-1','1.5','16777216','text'])assert.throws(()=>validateSpot({...input,mode:'DMR',dmr_type:'bm',talkgroup}));
+  assert.throws(()=>validateSpot({...input,notes:'a'.repeat(501)}));
+  const html=spotMessage({...bm,created_at:1});assert.ok(html.includes('BrandMeister'));assert.ok(!html.includes('0 MHz'));assert.ok(html.includes('&lt;test&gt;<br>Seconda riga'));
+});
+test('three concurrent active spots allowed, fourth rejected, QRT frees one slot',async t=>{
+  const DB=database();t.after(()=>DB.close());
+  t.mock.method(globalThis,'fetch',async(url)=>Response.json({ok:true,result:url.endsWith('/getChatMember')?{status:'member'}:{message_id:42}}));
+  const env={DB,TELEGRAM_BOT_TOKEN:token,TELEGRAM_GROUP_ID:'@IQ1TO',TELEGRAM_TOPIC_ID:'8'},pending=[];
+  const request=(path,method='GET',payload)=>worker.fetch(new Request('https://spot.example/api'+path,{method,headers:{'X-Telegram-Init-Data':signed(),'Content-Type':'application/json'},body:payload?JSON.stringify(payload):undefined}),env,{waitUntil(p){pending.push(p);}});
+  const ids=Array.from({length:4},()=>crypto.randomUUID());
+  const responses=await Promise.all(ids.map(id=>request('/spots','POST',{...input,id})));
+  assert.deepEqual(responses.map(r=>r.status).sort(),[201,201,201,409]);await Promise.all(pending);
+  const data=await (await request('/spots')).json();assert.equal(data.mine_active.length,3);assert.equal(data.spots.filter(s=>s.is_owner).length,3);
+  assert.equal((await request('/spots','POST',{...input,id:data.mine_active[0].id})).status,200);
+  assert.equal((await request(`/spots/${data.mine_active[0].id}/qrt`,'POST')).status,200);
+  assert.equal((await request('/spots','POST',{...input,id:crypto.randomUUID()})).status,201);await Promise.all(pending);
+  await assert.rejects(DB.prepare(`INSERT INTO spots(id,user_id,callsign,band,frequency_hz,mode,locator,created_at) VALUES('fourth',123,'IU1ABC','40',7100000,'CW','JN35UC',1)`).run(),/max_active_spots/);
+});
+test('QSL stores server distance, UTC and report, blocks own/duplicate/ended logs and updates rich message',async t=>{
+  const DB=database();t.after(()=>DB.close());const calls=[],pending=[];
+  t.mock.method(globalThis,'fetch',async(url,options)=>{calls.push({method:url.split('/').pop(),body:JSON.parse(options.body)});return Response.json({ok:true,result:url.endsWith('/getChatMember')?{status:'member'}:{message_id:42}});});
+  const env={DB,TELEGRAM_BOT_TOKEN:token,TELEGRAM_GROUP_ID:'@IQ1TO',TELEGRAM_TOPIC_ID:'8'};
+  const request=(path,method='GET',payload,user=123)=>worker.fetch(new Request('https://spot.example/api'+path,{method,headers:{'X-Telegram-Init-Data':signed(user),'Content-Type':'application/json'},body:payload?JSON.stringify(payload):undefined}),env,{waitUntil(p){pending.push(p);}});
+  assert.equal((await request('/spots','POST',{...input,mode:'CW',notes:'QRP <5W>'})).status,201);await Promise.all(pending);
+  const time=Math.floor(Date.now()/1000),qsl={callsign:'iu1xyz',locator:'JN45UC',report:'599',occurred_at:time,distance_km:999999};
+  assert.equal((await request(`/spots/${input.id}/logs`,'POST',qsl)).status,403);
+  assert.equal((await request(`/spots/${input.id}/logs`,'POST',{...qsl,report:'59'},456)).status,400);
+  assert.equal((await request(`/spots/${input.id}/logs`,'POST',{...qsl,occurred_at:time+3600},456)).status,400);
+  assert.equal((await request(`/spots/${input.id}/logs`,'POST',qsl,456)).status,201);await Promise.all(pending);
+  assert.equal((await request(`/spots/${input.id}/logs`,'POST',qsl,456)).status,409);
+  const data=await (await request(`/spots/${input.id}/logs`,'GET',undefined,456)).json();
+  assert.equal(data.total,1);assert.equal(data.can_log,false);assert.equal(data.logs[0].callsign,'IU1XYZ');assert.equal(data.logs[0].occurred_at,time);
+  assert.equal(data.logs[0].distance_km,distanceBetween('JN45UC',input.locator));
+  const edit=calls.filter(c=>c.method==='editMessageText').at(-1).body;
+  assert.ok(edit.rich_message.html.includes('<th>RST</th>'));assert.ok(edit.rich_message.html.includes('IU1XYZ'));assert.ok(edit.rich_message.html.includes('QRP &lt;5W&gt;'));assert.ok(!('text' in edit));
+  assert.equal((await request(`/spots/${input.id}/qrt`,'POST')).status,200);await Promise.all(pending);
+  assert.equal((await request(`/spots/${input.id}/logs`,'POST',qsl,789)).status,409);
+  await DB.prepare('DELETE FROM spots WHERE id=?').bind(input.id).run();assert.equal((await DB.prepare('SELECT COUNT(*) AS n FROM qsl_logs').first()).n,0);
+});
+test('QSL validation supports RS and geographical distance; rich logs have bounded size',()=>{
+  const spot={...validateSpot(input),created_at:100,mode:'Fonia',qsl_count:101};
+  const log=validateQSL({callsign:'iu1xyz',locator:'JN35TA',report:'59',occurred_at:101},spot,102);assert.equal(log.distance_km,0);
+  assert.throws(()=>validateQSL({...log,report:'599'},spot,102));
+  assert.ok(distanceBetween('JJ00AA','JJ01AA')>110 && distanceBetween('JJ00AA','JJ01AA')<112);
+  const html=spotMessage(spot,Array.from({length:101},()=>({...log,callsign:'A1AAAAAAAAAAAAAAAAAA'})));
+  assert.ok(html.includes('Ultimi 100 QSL'));assert.ok(html.length<32768);assert.equal((html.match(/A1AAAAAAAAAAAAAAAAAA/g)||[]).length,100);
+});
+test('QSL during an in-flight Telegram edit keeps a pending revision',async t=>{
+  const DB=database();t.after(()=>DB.close());
+  const env={DB,TELEGRAM_BOT_TOKEN:token,TELEGRAM_GROUP_ID:'@IQ1TO',TELEGRAM_TOPIC_ID:'8'};
+  await DB.prepare(`INSERT INTO spots(id,user_id,callsign,band,frequency_hz,mode,locator,created_at,message_id) VALUES('race-log',123,'IU1ABC','40',7100000,'CW','JN35UC',1,42)`).run();
+  let count=0;
+  t.mock.method(globalThis,'fetch',async()=>{
+    if(count++===0)await DB.prepare(`INSERT INTO qsl_logs(spot_id,user_id,callsign,locator,report,occurred_at,recorded_at,distance_km) VALUES('race-log',456,'IU1XYZ','JN35UC','599',2,2,0)`).run();
+    return Response.json({ok:true,result:true});
+  });
+  await syncSpot(env,'race-log');assert.equal((await DB.prepare("SELECT sync_state FROM spots WHERE id='race-log'").first()).sync_state,'pending');
+  await syncSpot(env,'race-log');assert.equal((await DB.prepare("SELECT sync_state FROM spots WHERE id='race-log'").first()).sync_state,'synced');
 });

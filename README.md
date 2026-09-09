@@ -7,14 +7,14 @@ Telegram Mini App per i membri di [IQ1TO](https://t.me/IQ1TO), associata a **@IQ
 - Verifica server della firma Telegram `initData` (scadenza un’ora) e appartenenza al gruppo con `getChatMember` a ogni richiesta. Riaprire l’app rinnova la sessione.
 - Due tab: QSO attivi (lista, QRT e direzione antenna) e Genera SPOT (profilo e modulo).
 - Nominativo, banda in metri, frequenza MHz, modo e locator Maidenhead a sei caratteri. GPS ad alta precisione con fallback Telegram 8+. Solo il locator lascia il dispositivo.
-- Una presenza attiva per utente; lista dei 200 SPOT più recenti; aggiornamento ogni 60 secondi a schermata visibile e pulsante manuale.
+- Fino a tre SPOT attivi per utente, ciascuno con QRT indipendente; lista dei 200 SPOT più recenti; aggiornamento ogni 60 secondi a schermata visibile e pulsante manuale.
 - Pubblicazione nel topic dell’attività (vedi sotto); QRT riservato al proprietario e modifica del messaggio originale.
-- Idempotenza delle creazioni, cooldown di 60 secondi, query parametrizzate, limite payload, output testuale senza HTML utente.
+- Idempotenza delle creazioni, limite di tre presenze verificato atomicamente anche da trigger D1, query parametrizzate, limite payload, testo utente con escape HTML. Non è più necessario attendere un minuto tra i tre SPOT.
 - Notifiche persistenti con tentativi automatici, cron ogni 5 minuti (massimo 10 invii per esecuzione). SPOT conclusi conservati per 30 giorni; quelli attivi restano fino al QRT.
 
 ## Configurazione Cloudflare
 
-Per gli aggiornamenti via GitHub lasciare il comando di deploy `npm run db:remote && npm run deploy`: applica anche la migrazione `0002_profiles_activities.sql` prima del codice. Non ricreare il database: gli SPOT esistenti vengono conservati.
+Per gli aggiornamenti via GitHub lasciare il comando di deploy `npm run db:remote && npm run deploy`: applica tutte le migrazioni, compresa `0003_dmr_qsl.sql`, prima del codice. Non ricreare il database: gli SPOT e i profili esistenti vengono conservati.
 
 ### Profili, attività e direzione antenna
 
@@ -23,9 +23,19 @@ Per gli aggiornamenti via GitHub lasciare il comando di deploy `npm run db:remot
 - Banda a rotella con un solo valore visibile, scorrimento verticale e frecce da tastiera. Frequenza in un unico controllo, con + sopra e − sotto ogni cifra (fino a 1 Hz). Ogni pulsante incrementa/decrementa la posizione decimale corrispondente con riporto; le operazioni fuori banda sono disabilitate.
 - Il GPS richiede `enableHighAccuracy: true` e `maximumAge: 0`, scarta fix vecchi oltre 10 secondi e cerca per massimo 25 secondi quello più preciso (si ferma subito entro 30 m). Se necessario prova anche il servizio Telegram, valutando `horizontal_accuracy`. Il locator viene sostituito solo con accuratezza dichiarata entro 100 m, visualizzata nel modulo; altrimenti resta modificabile manualmente. Nessun tracciamento continuo: il watch viene fermato a fine acquisizione. Anche una posizione precisa può cadere vicino al confine di un locator: la qualità effettiva dipende dal dispositivo, dai permessi e dal segnale GPS.
 - Attività SOTA/POTA nel topic 12, IAC nel topic 5, CONTEST o nessuna attività nel topic CQ Spot configurato. Nome/riferimento obbligatorio per ogni attività, salvato in maiuscolo come il nominativo. Il topic viene memorizzato alla creazione.
-- Messaggi HTML con grassetto e frequenza/locator monospazio. QRT modifica il messaggio originale.
+- Messaggi ricchi Telegram tramite `sendRichMessage` con `rich_message.html`: intestazioni, tabella dati SPOT, note e tabella QSL Log. QRT e QSL aggiornano il messaggio originale con `editMessageText` e `rich_message`. Richiede un client Telegram aggiornato per il rendering dei rich message.
 - Direzione antenna: azimut sul percorso corto tra i centri dei locator, dal nord geografico. Stesso locator: direzione indeterminata. Il pulsante Telegram apre `https://t.me/IQ1TObot?startapp=bearing_LOCATOR` per calcolare i gradi dal locator di chi legge; richiede la Main Mini App configurata in BotFather.
-- La lista esegue ora tre letture indicizzate D1 (SPOT, proprio SPOT e proprio profilo). Il profilo è conservato fino a modifica/rimozione amministrativa, separato dalla pulizia degli SPOT.
+- La lista esegue quattro letture indicizzate D1 (SPOT, ultimo proprio SPOT, propri SPOT attivi e profilo). Il profilo è conservato fino a modifica/rimozione amministrativa, separato dalla pulizia degli SPOT.
+
+### DMR, note e QSL Log
+
+- Selezionando DMR è obbligatoria la scelta Diretto o BM TG. Diretto richiede banda e frequenza; BM TG richiede un numero talkgroup (1–16777215), senza frequenza. Non viene consultato un catalogo BrandMeister per verificare l’esistenza del TG. Per compatibilità con lo schema originario, gli SPOT BM usano `band=''` e `frequency_hz=0`; questi segnaposto non sono mostrati come frequenze radio. Gli SPOT DMR precedenti diventano Diretti nella migrazione.
+- Note facoltative fino a 500 caratteri, pubblicate nella scheda e nel messaggio con escape HTML.
+- Ogni altro membro può confermare un QSO per SPOT attivo tramite QSL Log; il proprietario non può auto-confermarsi. Nominativo e locator di partenza sono precompilati e modificabili; data/ora sono inserite esplicitamente in UTC (default: ora attuale). Il server accetta orari dall’apertura dello SPOT fino all’ora attuale, con 60 secondi di tolleranza.
+- Il rapporto è quello assegnato dal corrispondente al segnale della stazione che ha pubblicato lo SPOT: RS per i modi diversi da CW, RST per CW. R: 1–5, S/T: 1–9. L’ID Telegram deriva dalla firma, non dal modulo. Il vincolo `(spot_id,user_id)` evita doppie conferme.
+- La distanza in km è calcolata sul server tra i centri dei locator con la formula di Haversine; per BM TG è una distanza geografica, non la tratta radio. Il log salva anche l’ora di registrazione sul server e resta associato allo SPOT dopo il QRT.
+- Il messaggio mostra gli ultimi 100 QSL e il totale per rientrare nei limiti dei rich message; la Mini App carica il log a pagine di 50 righe. Il pulsante Telegram `startapp=qsl_ID` apre anche il log di uno SPOT concluso. Il log aperto si aggiorna con la lista; se si stanno leggendo pagine precedenti, riaprire il log per tornare agli ultimi QSL.
+- QSL e QRT incrementano una revisione persistente: modifiche durante un invio Telegram non vengono perse. Il cron ritenta entro il normale intervallo di 5 minuti. I log sono eliminati in cascata quando lo SPOT viene rimosso dopo la conservazione di 30 giorni: questo è un registro di presenza, non un archivio permanente del log di stazione.
 
 Richiede Node.js 22.13+ e un account Cloudflare. Su PowerShell usare `npm.cmd` / `npx.cmd` se le policy bloccano gli script `.ps1`.
 
@@ -73,7 +83,7 @@ L’interfaccia locale si apre nel browser, ma le operazioni richiedono autentic
 
 La lista delle bande è in `public/radio.js`: LF, MF, HF, 6/4/2 m e UHF fino a 0,13 m, con frequenze intere in Hz nel database. Si tratta di una whitelist radioamatoriale Region 1, **non** di una verifica delle autorizzazioni nazionali, della licenza, della potenza, della larghezza di banda o delle sottobande per modo. Le bande non comprese si aggiungono nello stesso file condiviso da server e browser. Nominativo e posizione sono dichiarati dall’utente: l’app verifica il formato, non l’effettivo possesso del nominativo o l’autenticità del GPS.
 
-Una richiesta di lista comporta una richiesta Worker, una verifica Telegram e tre letture indicizzate D1. Gli asset sono statici. Il cron esegue 288 volte al giorno; la cancellazione è limitata a 500 righe per esecuzione. Nessuna cronologia infinita, servizio di geocoding o polling a schermata nascosta.
+Una richiesta di lista comporta una richiesta Worker, una verifica Telegram e quattro letture indicizzate D1. La consultazione QSL aggiunge tre letture solo quando il log viene aperto o aggiornato. Gli asset sono statici. Il cron esegue 288 volte al giorno; la cancellazione è limitata a 500 SPOT per esecuzione, con i relativi QSL. Nessuna cronologia infinita, servizio di geocoding o polling a schermata nascosta.
 
 Dopo otto tentativi falliti la notifica passa a `failed`, visibile al proprietario. Dopo aver corretto token/permessi/topic, un amministratore può ripristinare i tentativi da D1 Studio:
 
@@ -82,9 +92,11 @@ UPDATE spots SET sync_state='pending', sync_attempts=0, sync_after=0
 WHERE sync_state='failed';
 ```
 
-Telegram non offre una chiave di idempotenza per `sendMessage`: se il server accetta il messaggio ma la risposta si perde prima del salvataggio del suo ID, un tentativo successivo può produrre un duplicato. Il vincolo in D1 evita comunque SPOT duplicati nell’app. Un messaggio eliminato manualmente non può essere aggiornato al QRT e verrà segnalato come errore dopo i tentativi. Il database non conserva coordinate precise, token o `initData`; i profili conservano nominativo, nome e locator predefinito associati all’ID Telegram. I messaggi Telegram restano nel gruppo anche dopo la pulizia D1.
+Telegram non offre una chiave di idempotenza per `sendRichMessage`: se il server accetta il messaggio ma la risposta si perde prima del salvataggio del suo ID, un tentativo successivo può produrre un duplicato. Il vincolo in D1 evita comunque SPOT duplicati nell’app. Un messaggio eliminato manualmente non può essere aggiornato al QRT e verrà segnalato come errore dopo i tentativi. Il database non conserva coordinate precise, token o `initData`; i profili conservano nominativo, nome e locator predefinito associati all’ID Telegram. I messaggi Telegram restano nel gruppo anche dopo la pulizia D1.
 
 ## Riferimenti
+
+- [Telegram Rich Message Formatting Options](https://core.telegram.org/bots/api#rich-message-formatting-options)
 
 - [Validazione Telegram Mini Apps](https://core.telegram.org/bots/webapps#validating-data-received-via-the-mini-app)
 - [Telegram getChatMember](https://core.telegram.org/bots/api#getchatmember)

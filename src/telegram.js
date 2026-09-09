@@ -24,9 +24,21 @@ export async function telegram(env, method, payload) {
 export function isMember(member) {
   return ['creator','administrator','member'].includes(member.status) || (member.status === 'restricted' && member.is_member === true);
 }
-export function spotMessage(spot) {
-  const time = new Date((spot.ended_at || spot.created_at)*1000).toLocaleString('it-IT', { timeZone:'Europe/Rome', day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit' });
-  return `<b>${spot.ended_at ? '⚫ QRT' : '🟢 CQ SPOT'} · ${escapeHTML(spot.callsign)}</b>\n\n📻 <code>${formatFrequency(spot.frequency_hz)} MHz</code> · <b>${escapeHTML(spot.mode)}</b>\nBanda <b>${escapeHTML(spot.band)} m</b> · Locator <code>${escapeHTML(spot.locator)}</code>${spot.activity ? `\n🏷 <b>${escapeHTML(spot.activity)}</b> · ${escapeHTML(spot.activity_name)}` : ''}\n\n<i>${spot.ended_at ? 'Terminato' : 'In radio'}: ${time} (Roma)</i>`;
+export function spotMessage(spot,logs=[]) {
+  const utc=seconds=>new Date(seconds*1000).toISOString().replace('T',' ').slice(0,19);
+  const row=(label,value)=>`<tr><th>${label}</th><td>${escapeHTML(value)}</td></tr>`;
+  const network=spot.mode==='DMR' && spot.dmr_type==='bm';
+  const info=network ? row('Rete','BrandMeister')+row('Talkgroup',spot.talkgroup) : row('Banda',`${spot.band} m`)+row('Frequenza',`${formatFrequency(spot.frequency_hz)} MHz`);
+  const report=spot.mode==='CW'?'RST':'RS';
+  const logRows=logs.slice(0,100).map(log=>`<tr><td>${utc(log.occurred_at)}</td><td>${escapeHTML(log.callsign)}</td><td>${escapeHTML(log.locator)}</td><td>${Number(log.distance_km).toFixed(1)}</td><td>${escapeHTML(log.report)}</td></tr>`).join('');
+  return `<h2>${spot.ended_at ? '⚫ QRT' : '🟢 CQ SPOT'} · <b>${escapeHTML(spot.callsign)}</b></h2>`+
+    `<table bordered compact>${info}${row('Modo',spot.mode+(spot.dmr_type==='direct'?' · Diretto':''))}${row('Locator',spot.locator)}${spot.activity?row(spot.activity,spot.activity_name):''}</table>`+
+    (spot.notes?`<h3>Note</h3><blockquote>${escapeHTML(spot.notes).replace(/\n/g,'<br>')}</blockquote>`:'')+
+    `<h3>QSL Log · ${spot.qsl_count || 0}</h3>`+
+    (logs.length?`<table bordered striped compact><tr><th>Data/ora UTC</th><th>Nominativo</th><th>Locator</th><th>km</th><th>${report}</th></tr>${logRows}</table>`:'<p>Nessun QSO confermato.</p>')+
+    (spot.qsl_count>100?'<p>Ultimi 100 QSL. Log completo nella Mini App.</p>':'')+
+    `<p><i>Distanze geografiche tra i centri dei locator${network?', non distanze della tratta radio BrandMeister':''}. Rapporti ${report} assegnati dai corrispondenti alla stazione dello SPOT.</i></p>`+
+    `<footer>${spot.ended_at?'Terminato':'In radio'}: ${utc(spot.ended_at || spot.created_at)} UTC</footer>`;
 }
 const escapeHTML = value => String(value ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 export const topicFor = (activity,env) => ['SOTA','POTA'].includes(activity) ? 12 : activity==='IAC' ? 5 : Number(env.TELEGRAM_TOPIC_ID);
@@ -36,16 +48,17 @@ export async function syncSpot(env, id) {
     WHERE id=? AND sync_state='pending' AND sync_after<=? RETURNING *`).bind(now+90,id,now).first();
   if (!spot) return;
   try {
-    const result = await telegram(env, spot.message_id ? 'editMessageText' : 'sendMessage', {
+    const logs=await env.DB.prepare('SELECT callsign,locator,report,occurred_at,distance_km FROM qsl_logs WHERE spot_id=? ORDER BY id DESC LIMIT 100').bind(id).all();
+    const result = await telegram(env, spot.message_id ? 'editMessageText' : 'sendRichMessage', {
       chat_id: env.TELEGRAM_GROUP_ID,
       ...(spot.message_id ? { message_id: spot.message_id } : { message_thread_id: spot.topic_id ?? topicFor(spot.activity,env) }),
-      text: spotMessage(spot), parse_mode:'HTML',
-      reply_markup:{inline_keyboard:spot.ended_at ? [] : [[{text:'🧭 Direzione antenna',url:`https://t.me/IQ1TObot?startapp=bearing_${spot.locator}`}]]}
+      rich_message:{html:spotMessage(spot,logs.results),skip_entity_detection:true},
+      reply_markup:{inline_keyboard:[...(spot.ended_at ? [] : [[{text:'🧭 Direzione antenna',url:`https://t.me/IQ1TObot?startapp=bearing_${spot.locator}`}]]),[{text:spot.ended_at?'📒 QSL Log':'📒 QSL Log · Conferma QSO',url:`https://t.me/IQ1TObot?startapp=qsl_${spot.id}`}]]}
     });
     // A QRT may have happened while sendMessage was in flight: preserve its pending edit.
     await env.DB.prepare(`UPDATE spots SET message_id=COALESCE(message_id,?),
-      sync_state=CASE WHEN ended_at IS ? THEN 'synced' ELSE 'pending' END,
-      sync_attempts=0, sync_after=0, lease_until=0 WHERE id=?`).bind(spot.message_id || result.message_id,spot.ended_at,id).run();
+      sync_state=CASE WHEN ended_at IS ? AND revision=? THEN 'synced' ELSE 'pending' END,
+      sync_attempts=0, sync_after=0, lease_until=0 WHERE id=?`).bind(spot.message_id || result.message_id,spot.ended_at,spot.revision,id).run();
   } catch (error) {
     await env.DB.prepare(`UPDATE spots SET sync_state=?, sync_after=?, lease_until=0 WHERE id=?`)
       .bind(spot.sync_attempts >= 8 ? 'failed' : 'pending',now+Math.max(error.retryAfter || 60,Math.min(3600,30 * 2 ** spot.sync_attempts)),id).run();
