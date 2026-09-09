@@ -76,6 +76,15 @@ async function handle(request,env,ctx) {
     ctx.waitUntil(syncSpot(env,input.id));
     return json({id:input.id},201);
   }
+  const spotDelete=url.pathname.match(/^\/api\/spots\/([0-9a-f-]{36})$/i);
+  if(request.method==='DELETE' && spotDelete) {
+    const spot=await env.DB.prepare('SELECT id,user_id,message_id,sync_state FROM spots WHERE id=?').bind(spotDelete[1]).first();
+    if(!spot || spot.user_id!==user.id)throw fail(404,'SPOT non trovato.');
+    if(spot.sync_state==='sending')throw fail(409,'Attendi la fine dell’aggiornamento Telegram prima di eliminare lo SPOT.');
+    if(spot.message_id) await telegram(env,'deleteMessage',{chat_id:env.TELEGRAM_GROUP_ID,message_id:spot.message_id});
+    await env.DB.prepare('DELETE FROM spots WHERE id=? AND user_id=?').bind(spot.id,user.id).run();
+    return json({ok:true});
+  }
   const qslDelete=url.pathname.match(/^\/api\/spots\/([0-9a-f-]{36})\/logs\/(\d+)$/i);
   if(request.method==='DELETE' && qslDelete) {
     const spot=await env.DB.prepare('SELECT id FROM spots WHERE id=?').bind(qslDelete[1]).first();

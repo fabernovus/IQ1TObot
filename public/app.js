@@ -103,12 +103,18 @@ function card(spot,own=false) {
   if(!own && spot.frequency_hz>0) {const button=document.createElement('button');button.type='button';button.className='text-button';button.textContent='🧭 Direzione antenna';button.addEventListener('click',()=>showBearing(spot.locator,spot.callsign));el.append(button);}
   const logButton=document.createElement('button');logButton.type='button';logButton.className='text-button';logButton.textContent=`📒 QSL Log (${spot.qsl_count || 0})${own?'':' · Conferma QSO'}`;
   logButton.addEventListener('click',()=>openQSL(spot.id));el.append(logButton);
-  if(own){const qrt=document.createElement('button');qrt.type='button';qrt.className='danger';qrt.dataset.qrt=spot.id;qrt.textContent='QRT · Termina questo SPOT';qrt.addEventListener('click',()=>endSpot(spot.id));el.append(qrt);}
+  if(own){const qrt=document.createElement('button');qrt.type='button';qrt.className='danger';qrt.dataset.qrt=spot.id;qrt.textContent='QRT · Termina questo SPOT';qrt.addEventListener('click',()=>endSpot(spot.id));el.append(qrt);const remove=document.createElement('button');remove.type='button';remove.className='danger text-button';remove.textContent='Elimina SPOT e messaggio';remove.addEventListener('click',()=>deleteSpot(spot.id));el.append(remove);}
   return el;
 }
 async function endSpot(id) {
   if(busy)return;busy=true;locks();
   try {await api(`/spots/${id}/qrt`,'POST');await refresh();}catch(error){status(error.message,true);}finally{busy=false;locks();}
+}
+async function deleteSpot(id) {
+  if(busy || !confirm('Eliminare definitivamente questo SPOT e il messaggio Telegram?'))return;
+  busy=true;locks();
+  try {await api(`/spots/${id}`,'DELETE');if(qslTarget?.id===id){qslTarget=null;$('qsl-panel').hidden=true;}await refresh();status('SPOT e messaggio Telegram eliminati.');}
+  catch(error){status(error.message,true);}finally{busy=false;locks();}
 }
 function logRows(rows,append=false) {
   if(!append)$('qsl-rows').replaceChildren();
