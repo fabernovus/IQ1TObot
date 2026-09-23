@@ -5,7 +5,7 @@ const $ = id => document.getElementById(id);
 const tg = window.Telegram?.WebApp;
 const initData = tg?.initData;
 if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js').catch(()=>{});
-let mine = null, busy = false, loading = false, authenticated = false, profileLoaded = false, activity = '', bearingTarget = '', bearingSpotId = '', bearingAngle = null, deviceHeading = null, compassRotation = null, compassListening = false, selectedTab = 'list', detailView = '';
+let mine = null, busy = false, loading = false, authenticated = false, profileLoaded = false, activity = '', bearingTarget = '', bearingSpotId = '', bearingAngle = null, deviceHeading = null, compassRotation = null, compassListening = false, selectedTab = 'list', detailView = '', appView = 'home';
 let requestId = crypto.randomUUID();
 let mineActive=[],qslTarget=null,qslNext=null,qslSequence=0,qslExpanded=false;
 const status = (text,error=false) => { $('status').textContent=text; $('status').classList.toggle('error',error); };
@@ -41,8 +41,15 @@ function dmrChoice() {
   if(!$('radio-fields').hidden)requestAnimationFrame(()=>bandWheel.reveal());
 }
 $('mode').addEventListener('change',dmrChoice);$('dmr-type').addEventListener('change',dmrChoice);dmrChoice();
+function updateBackButton() { if(appView==='qso')tg?.BackButton?.show?.();else tg?.BackButton?.hide?.(); }
+function openHome() {
+  appView='home';detailView='';$('home').hidden=false;$('qso-tool').hidden=true;renderDetail('');window.scrollTo({top:0,behavior:'smooth'});updateBackButton();
+}
+function openQso() {
+  appView='qso';$('home').hidden=true;$('qso-tool').hidden=false;updateBackButton();requestAnimationFrame(()=>bandWheel.reveal());
+}
 function selectTab(name,focus=false) {
-  selectedTab=name;detailView='';$('main-tabs').hidden=false;$('spots-section').hidden=false;$('bearing-panel').hidden=true;$('qsl-panel').hidden=true;tg?.BackButton?.hide?.();
+  selectedTab=name;detailView='';$('main-tabs').hidden=false;$('spots-section').hidden=false;$('bearing-panel').hidden=true;$('qsl-panel').hidden=true;updateBackButton();
   for(const tab of ['list','create']) {
     const active=tab===name;
     $(`tab-${tab}`).setAttribute('aria-selected',String(active));$(`tab-${tab}`).tabIndex=active?0:-1;
@@ -55,14 +62,16 @@ function renderDetail(name) {
   if(detailView==='qsl' && name!=='qsl'){qslSequence++;qslTarget=null;}
   detailView=name;$('main-tabs').hidden=!!name;$('panel-create').hidden=!!name || selectedTab!=='create';$('panel-list').hidden=!name && selectedTab!=='list';
   $('spots-section').hidden=!!name;$('bearing-panel').hidden=name!=='bearing';$('qsl-panel').hidden=name!=='qsl';
-  if(name)tg?.BackButton?.show?.();else tg?.BackButton?.hide?.();
+  updateBackButton();
   window.scrollTo({top:0,behavior:'smooth'});
 }
-function openDetail(name,push=true) {renderDetail(name);if(push && history.state?.cqDetail!==name)history.pushState({cqDetail:name},'');}
-function detailBack() {if(history.state?.cqDetail)history.back();else renderDetail('');}
+function openDetail(name,push=true) {openQso();renderDetail(name);if(push && history.state?.cqDetail!==name)history.pushState({cqDetail:name},'');}
+function detailBack() {if(detailView){if(history.state?.cqDetail)history.back();else renderDetail('');}else openHome();}
 history.replaceState({...history.state,cqDetail:''},'');
 window.addEventListener('popstate',event=>renderDetail(event.state?.cqDetail || ''));
 tg?.BackButton?.onClick?.(detailBack);
+$('open-qso').addEventListener('click',openQso);
+$('home-back').addEventListener('click',openHome);
 for(const tab of ['list','create']) {
   $(`tab-${tab}`).addEventListener('click',()=>selectTab(tab));
   $(`tab-${tab}`).addEventListener('keydown',event=>{

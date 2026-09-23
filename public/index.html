@@ -12,9 +12,17 @@
 </head>
 <body>
 <main>
-  <header><div><span class="eyebrow">IQ1TO</span><h1 id="cq-title" tabindex="0" title="Tocca 5 volte per aggiornare la cache">CQ Spot<span class="signal" aria-hidden="true"> ◉</span></h1></div><a href="https://t.me/IQ1TO">Gruppo ↗</a></header>
+  <header><div><span class="eyebrow">IQ1TO</span><h1 id="cq-title" tabindex="0" title="Tocca 5 volte per aggiornare la cache">Dashboard<span class="signal" aria-hidden="true"> ◉</span></h1></div><a href="https://t.me/IQ1TO">Gruppo ↗</a></header>
   <p id="status" role="status" aria-live="polite">Connessione a Telegram…</p>
-  <nav id="main-tabs" class="tabs" role="tablist" aria-label="CQ Spot">
+  <section id="home" aria-labelledby="home-title">
+    <div class="hero panel"><span class="eyebrow">Utility</span><h2 id="home-title">Strumenti del gruppo IQ1TO</h2><p class="hint">Scegli una funzione. Questa pagina diventerà la dashboard con tutte le utility.</p></div>
+    <div class="utility-grid">
+      <button id="open-qso" type="button" class="utility-card"><span>QSO Spot</span><small>Annuncia la tua presenza in radio e consulta gli SPOT attivi.</small></button>
+    </div>
+  </section>
+  <section id="qso-tool" hidden aria-label="QSO Spot">
+  <div class="section-head tool-head"><h2>QSO Spot</h2><button id="home-back" type="button" class="text-button">← Dashboard</button></div>
+  <nav id="main-tabs" class="tabs" role="tablist" aria-label="QSO Spot">
     <button id="tab-list" type="button" role="tab" aria-selected="true" aria-controls="panel-list">QSO attivi</button>
     <button id="tab-create" type="button" role="tab" aria-selected="false" aria-controls="panel-create" tabindex="-1">Genera SPOT</button>
   </nav>
@@ -82,7 +90,8 @@
   </section>
   <section id="spots-section" aria-labelledby="spots-title"><div class="section-head"><h2 id="spots-title">In radio <span id="count" class="count">0</span></h2><button id="refresh" class="text-button" disabled>Aggiorna ↻</button></div><p id="updated" class="hint">SPOT attivi del gruppo</p><div id="spots"><p class="empty">Gli SPOT appariranno qui dopo l’accesso.</p></div></section>
   </div>
-  <footer>73 de IQ1TO · CQ Spot</footer>
+  </section>
+  <footer>73 de IQ1TO</footer>
 </main>
 </body>
 </html>
