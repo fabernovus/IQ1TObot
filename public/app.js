@@ -42,8 +42,10 @@ function dmrChoice() {
 }
 $('mode').addEventListener('change',dmrChoice);$('dmr-type').addEventListener('change',dmrChoice);dmrChoice();
 function updateBackButton() { if(appView==='qso')tg?.BackButton?.show?.();else tg?.BackButton?.hide?.(); }
+function closeTools() {$('tools-folder').hidden=true;}
+function openTools() {$('tools-folder').hidden=false;}
 function openHome() {
-  appView='home';detailView='';$('home').hidden=false;$('qso-tool').hidden=true;renderDetail('');window.scrollTo({top:0,behavior:'smooth'});updateBackButton();
+  appView='home';detailView='';$('home').hidden=false;$('qso-tool').hidden=true;closeTools();renderDetail('');window.scrollTo({top:0,behavior:'smooth'});updateBackButton();
 }
 function openQso() {
   appView='qso';$('home').hidden=true;$('qso-tool').hidden=false;updateBackButton();requestAnimationFrame(()=>bandWheel.reveal());
@@ -70,6 +72,8 @@ function detailBack() {if(detailView){if(history.state?.cqDetail)history.back();
 history.replaceState({...history.state,cqDetail:''},'');
 window.addEventListener('popstate',event=>renderDetail(event.state?.cqDetail || ''));
 tg?.BackButton?.onClick?.(detailBack);
+$('open-tools').addEventListener('click',openTools);
+$('close-tools').addEventListener('click',closeTools);
 $('open-qso').addEventListener('click',openQso);
 $('home-back').addEventListener('click',openHome);
 for(const tab of ['list','create']) {

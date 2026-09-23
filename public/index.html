@@ -14,11 +14,23 @@
 <main>
   <header><div><span class="eyebrow">IQ1TO</span><h1 id="cq-title" tabindex="0" title="Tocca 5 volte per aggiornare la cache">Dashboard<span class="signal" aria-hidden="true"> ◉</span></h1></div><a href="https://t.me/IQ1TO">Gruppo ↗</a></header>
   <p id="status" role="status" aria-live="polite">Connessione a Telegram…</p>
-  <section id="home" aria-labelledby="home-title">
-    <div class="hero panel"><span class="eyebrow">Utility</span><h2 id="home-title">Strumenti del gruppo IQ1TO</h2><p class="hint">Scegli una funzione. Questa pagina diventerà la dashboard con tutte le utility.</p></div>
-    <div class="utility-grid">
-      <button id="open-qso" type="button" class="utility-card"><span>QSO Spot</span><small>Annuncia la tua presenza in radio e consulta gli SPOT attivi.</small></button>
+  <section id="home" class="launcher" aria-labelledby="home-title">
+    <div class="launcher-intro"><h2 id="home-title">Dashboard</h2><p class="hint">Launcher utility IQ1TO</p></div>
+    <div class="launcher-grid" aria-label="Cartelle">
+      <button id="open-tools" type="button" class="folder-icon" aria-controls="tools-folder">
+        <span class="folder-preview" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+        <span>Tools</span>
+      </button>
     </div>
+    <section id="tools-folder" class="folder-panel" aria-labelledby="tools-title" hidden>
+      <div class="section-head"><h2 id="tools-title">Tools</h2><button id="close-tools" type="button" class="text-button">Chiudi</button></div>
+      <div class="launcher-grid tools-grid" aria-label="Tools disponibili">
+        <button id="open-qso" type="button" class="app-icon">
+          <span class="app-symbol" aria-hidden="true">📡</span>
+          <span>QSO Spot</span>
+        </button>
+      </div>
+    </section>
   </section>
   <section id="qso-tool" hidden aria-label="QSO Spot">
   <div class="section-head tool-head"><h2>QSO Spot</h2><button id="home-back" type="button" class="text-button">← Dashboard</button></div>
