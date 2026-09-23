@@ -139,6 +139,7 @@ function renderBandPlan(){
   const list=element('div','plan-segments');
   for(const segment of segments){
     const card=element('article','plan-segment');
+    card.id=`plan-segment-${plan.segments.indexOf(segment)}`;
     const single=segment.from===segment.to;
     card.append(element('h4','',segment.label));
     const frequencies=element('dl',`plan-frequencies${single?' plan-single':''}`);
@@ -154,7 +155,16 @@ function renderBandPlan(){
       const button=element('button','',item);button.type='button';
       button.setAttribute('aria-label',`Cerca ${item} sulla banda ${plan.name}`);
       button.setAttribute('aria-pressed',String(item===mode));
-      button.addEventListener('click',()=>{$('plan-mode').value=item;setPlanView('search');$('plan-mode').focus();});
+      button.dataset.mode=item;
+      button.addEventListener('click',()=>{
+        // Filtering rebuilds the cards: keep this mode label at the same viewport
+        // position and restore keyboard focus locally, not on the top selector.
+        const previousTop=button.getBoundingClientRect().top,cardId=card.id;
+        $('plan-mode').value=item;setPlanView('search');
+        const replacement=Array.from($(cardId).querySelectorAll('button[data-mode]')).find(node=>node.dataset.mode===item);
+        replacement.focus({preventScroll:true});
+        window.scrollBy({top:replacement.getBoundingClientRect().top-previousTop,behavior:'instant'});
+      });
       chip.append(button);modes.append(chip);
     }
     card.append(frequencies,modes);list.append(card);
