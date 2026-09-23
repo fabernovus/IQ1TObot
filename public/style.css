@@ -7,6 +7,18 @@
 
 textarea{display:block;width:100%;font:inherit;color:var(--text);background:var(--bg);border:1px solid var(--line);border-radius:9px;padding:12px;margin-top:6px;resize:vertical}.spot-notes{white-space:pre-wrap;overflow-wrap:anywhere;font-size:14px}.spot>.danger{display:block;width:100%;margin-top:12px}.table-scroll{max-width:100%;overflow-x:auto}.qsl-table{border-collapse:collapse;width:100%;font-size:13px;font-variant-numeric:tabular-nums}.qsl-table caption{text-align:left;padding:14px 0;font-weight:700}.qsl-table th,.qsl-table td{text-align:left;padding:9px 8px;border-bottom:1px solid var(--line);white-space:nowrap}.qsl-table tbody tr:nth-child(even){background:var(--bg)}#qsl-form{margin-bottom:20px}#qsl-status{font-size:14px;color:var(--muted)}
  .inline-field{display:flex;align-items:end;gap:10px}.inline-field label{flex:1;min-width:0}.inline-field .secondary{margin-bottom:16px}#qsl-locator,#qsl-callsign{text-transform:uppercase}
+/* Dashboard: icon and label occupy separate, fixed rows, even when labels wrap. */
+#home .launcher-grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:20px 12px;align-items:start}
+#home .folder-icon,#home .app-icon{display:grid;grid-template-rows:64px minmax(36px,auto);justify-items:center;align-content:start;align-items:start;row-gap:10px;width:100%;min-width:0;padding:6px 0;border-radius:12px;line-height:1.5}
+#home .folder-preview,#home .app-symbol{width:64px;height:64px;margin:0;flex-shrink:0}
+#home .folder-icon>span:last-child,#home .app-icon>span:last-child{display:block;width:100%;min-height:36px;padding:0 2px;text-align:center;overflow-wrap:anywhere}
+#home .folder-panel .section-head{align-items:center;flex-wrap:wrap;gap:8px}
+#home .folder-panel .text-button{flex-shrink:0;min-height:44px}
+#home .folder-icon[aria-expanded=true]{background:color-mix(in srgb,var(--accent) 8%,transparent)}
+@media(hover:hover){#home .folder-icon:hover,#home .app-icon:hover{background:color-mix(in srgb,var(--text) 6%,transparent)}}
+@media(max-width:480px){#home .launcher-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:380px){#home .launcher-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:16px 12px}}
+
 /* Band plan: scoped layout, equal-width controls and frequency columns. */
 #bandplan-tool{min-width:0}
 .plan-header{flex-wrap:wrap;align-items:center;gap:12px}

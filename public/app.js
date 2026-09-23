@@ -46,10 +46,10 @@ function dmrChoice() {
 }
 $('mode').addEventListener('change',dmrChoice);$('dmr-type').addEventListener('change',dmrChoice);dmrChoice();
 function updateBackButton() { if(appView!=='home')tg?.BackButton?.show?.();else tg?.BackButton?.hide?.(); }
-function closeTools() {$('tools-folder').hidden=true;}
-function openTools() {$('cards-folder').hidden=true;$('tools-folder').hidden=false;}
-function closeCards() {$('cards-folder').hidden=true;}
-function openCards() {$('tools-folder').hidden=true;$('cards-folder').hidden=false;}
+function closeTools() {$('tools-folder').hidden=true;$('open-tools').setAttribute('aria-expanded','false');}
+function openTools() {closeCards();$('tools-folder').hidden=false;$('open-tools').setAttribute('aria-expanded','true');}
+function closeCards() {$('cards-folder').hidden=true;$('open-cards').setAttribute('aria-expanded','false');}
+function openCards() {closeTools();$('cards-folder').hidden=false;$('open-cards').setAttribute('aria-expanded','true');}
 function openHome() {
   appView='home';detailView='';$('home').hidden=false;$('qso-tool').hidden=true;$('iac-tool').hidden=true;$('bandplan-tool').hidden=true;closeTools();closeCards();renderDetail('');window.scrollTo({top:0,behavior:'smooth'});updateBackButton();
 }
@@ -172,9 +172,9 @@ function renderBandPlan(){
 }
 function openBandPlan(){appView='bandplan';$('home').hidden=true;$('qso-tool').hidden=true;$('iac-tool').hidden=true;$('bandplan-tool').hidden=false;renderBandPlan();window.scrollTo({top:0,behavior:'smooth'});updateBackButton();}
 $('open-tools').addEventListener('click',openTools);
-$('close-tools').addEventListener('click',closeTools);
+$('close-tools').addEventListener('click',()=>{closeTools();$('open-tools').focus();});
 $('open-cards').addEventListener('click',openCards);
-$('close-cards').addEventListener('click',closeCards);
+$('close-cards').addEventListener('click',()=>{closeCards();$('open-cards').focus();});
 $('open-iac').addEventListener('click',openIac);
 $('open-bandplan').addEventListener('click',openBandPlan);
 $('close-iac').addEventListener('click',openHome);
