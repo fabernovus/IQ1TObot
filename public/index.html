@@ -42,7 +42,20 @@
           <span class="app-symbol calendar-symbol" aria-hidden="true"></span>
           <span>Calendario IAC</span>
         </button>
+        <button id="open-bandplan" type="button" class="app-icon">
+          <span class="app-symbol bandplan-symbol" aria-hidden="true"></span>
+          <span>Band plan</span>
+        </button>
       </div>
+    </section>
+  </section>
+  <section id="bandplan-tool" hidden aria-label="Band plan radioamatoriale">
+    <div class="section-head tool-head"><h2 id="bandplan-title">Band plan · modi e frequenze</h2><button id="close-bandplan" type="button" class="home-button"><span class="home-mark" aria-hidden="true"></span>Dashboard</button></div>
+    <section class="panel">
+      <p class="hint">Indicazioni basate su MIMIT PNRF e relative Note, con sottobande/modi da band plan IARU Region 1: scegli lunghezza d’onda e modo per vedere dove puoi orientarti. Verifica sempre licenza, autorizzazioni nazionali, potenza e occupazione del canale.</p>
+      <div class="row"><label>Lunghezza d’onda / banda<select id="plan-band"></select></label><label>Modo<select id="plan-mode"></select></label></div>
+      <div id="plan-result" class="plan-result" role="status"></div>
+      <p class="hint">Fonte normativa: MIMIT PNRF, Tabelle e Note. Le sottobande per modo sono una guida operativa IARU. In HF convenzione laterale: LSB sotto 10 MHz, USB sopra 10 MHz; 60 m USB.</p>
     </section>
   </section>
   <section id="qso-tool" hidden aria-label="QSO Spot">
@@ -72,7 +85,7 @@
         <label id="dmr-choice" hidden>Collegamento DMR<select id="dmr-type"><option value="">Scegli…</option value="direct">Diretto · con frequenza</option><option value="bm">BM TG · BrandMeister</option></select></label>
         <label id="tg-choice" hidden>Talkgroup BrandMeister<input id="talkgroup" inputmode="numeric" pattern="[1-9][0-9]{0,7}" maxlength="8" placeholder="Es. 222"></label>
         <div id="radio-fields">
-        <div><span id="band-label" class="field-label">Banda</span><input id="band" name="band" type="hidden" value="40"><div id="band-wheel" class="band-wheel" role="spinbutton" aria-labelledby="band-label" aria-valuemin="0" aria-valuemax="17" aria-disabled="true" tabindex="-1"></div><p class="hint">Scorri ↕ per cambiare</p></div>
+        <div><span id="band-label" class="field-label">Banda</span><input id="band" name="band" type="hidden" value="40"><div id="band-wheel" class="band-wheel" role="spinbutton" aria-labelledby="band-label" aria-valuemin="0" aria-valuemax="16" aria-disabled="true" tabindex="-1"></div><p class="hint">Scorri ↕ per cambiare</p></div>
         <span class="field-label">Frequenza · MHz</span><input id="frequency" name="frequency" type="hidden">
         <div id="frequency-control" class="frequency-control" role="group" aria-describedby="frequency-hint"></div>
         <p id="frequency-hint" class="hint"></p>

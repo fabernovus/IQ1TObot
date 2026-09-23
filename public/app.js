@@ -1,4 +1,4 @@
-import { BANDS, MODES, locatorFromGPS, locatorCenter, validateSpot, validateProfile, validateQSL, formatFrequency, formatUtcLogDate, bearingBetween, distanceBetween } from './radio.js';
+import { BANDS, MODES, BAND_PLAN, BAND_PLAN_SOURCE, bandPlanMatches, locatorFromGPS, locatorCenter, validateSpot, validateProfile, validateQSL, formatFrequency, formatUtcLogDate, bearingBetween, distanceBetween } from './radio.js';
 import { bandControl, frequencyControl } from './controls.js';
 import { preciseGPS } from './gps.js';
 const $ = id => document.getElementById(id);
@@ -25,7 +25,10 @@ function titleTap() {
 $('cq-title').addEventListener('click',titleTap);
 $('cq-title').addEventListener('keydown',event=>{if(event.key==='Enter' || event.key===' '){event.preventDefault();titleTap();}});
 for (const mode of MODES) $('mode').add(new Option(mode,mode));
+for (const plan of BAND_PLAN) $('plan-band').add(new Option(plan.name,plan.band));
+for (const mode of MODES) $('plan-mode').add(new Option(mode,mode));
 $('band').value = '40'; $('mode').value = 'Fonia';
+$('plan-band').value = '40'; $('plan-mode').value = 'SSB';
 const frequency=frequencyControl($('frequency-control'),$('frequency'),()=>BANDS.find(b=>b[0]===$('band').value));
 function bandHint() {
   const b = BANDS.find(b=>b[0]===$('band').value);
@@ -47,10 +50,10 @@ function openTools() {$('cards-folder').hidden=true;$('tools-folder').hidden=fal
 function closeCards() {$('cards-folder').hidden=true;}
 function openCards() {$('tools-folder').hidden=true;$('cards-folder').hidden=false;}
 function openHome() {
-  appView='home';detailView='';$('home').hidden=false;$('qso-tool').hidden=true;$('iac-tool').hidden=true;closeTools();closeCards();renderDetail('');window.scrollTo({top:0,behavior:'smooth'});updateBackButton();
+  appView='home';detailView='';$('home').hidden=false;$('qso-tool').hidden=true;$('iac-tool').hidden=true;$('bandplan-tool').hidden=true;closeTools();closeCards();renderDetail('');window.scrollTo({top:0,behavior:'smooth'});updateBackButton();
 }
 function openQso() {
-  appView='qso';$('home').hidden=true;$('qso-tool').hidden=false;$('iac-tool').hidden=true;updateBackButton();requestAnimationFrame(()=>bandWheel.reveal());
+  appView='qso';$('home').hidden=true;$('qso-tool').hidden=false;$('iac-tool').hidden=true;$('bandplan-tool').hidden=true;updateBackButton();requestAnimationFrame(()=>bandWheel.reveal());
 }
 function selectTab(name,focus=false) {
   selectedTab=name;detailView='';$('main-tabs').hidden=false;$('spots-section').hidden=false;$('bearing-panel').hidden=true;$('qsl-panel').hidden=true;updateBackButton();
@@ -94,13 +97,29 @@ function renderIacCard(){
   $('iac-next').innerHTML=`<strong>Prossima tornata: ${next.frequency} MHz</strong><span>Tornata ${next.round} · ${next.rule} · ${dateFmt.format(next.date)}</span>`;
   $('iac-rows').replaceChildren(...items.map((item,index)=>{const row=document.createElement('tr');if(index===0)row.className='iac-current';for(const value of [item.round,item.frequency,item.rule,dateFmt.format(item.date)]){const cell=document.createElement('td');cell.textContent=value;row.append(cell);}return row;}));
 }
-function openIac(){appView='iac';$('home').hidden=true;$('qso-tool').hidden=true;$('iac-tool').hidden=false;renderIacCard();window.scrollTo({top:0,behavior:'smooth'});updateBackButton();}
+function openIac(){appView='iac';$('home').hidden=true;$('qso-tool').hidden=true;$('iac-tool').hidden=false;$('bandplan-tool').hidden=true;renderIacCard();window.scrollTo({top:0,behavior:'smooth'});updateBackButton();}
+function renderBandPlan(){
+  const plan=BAND_PLAN.find(item=>item.band===$('plan-band').value),mode=$('plan-mode').value,segments=bandPlanMatches(plan?.band,mode),box=$('plan-result');
+  if(!plan){box.textContent='Banda non trovata.';return;}
+  const title=document.createElement('h3');title.textContent=`${plan.name} · ${plan.range}`;
+  const legal=document.createElement('p');legal.className='plan-note';legal.textContent=plan.notes;
+  const note=document.createElement('p');note.className='hint';note.textContent=segments.length?`Finestre consigliate per ${mode}.`:`Nessuna finestra specifica per ${mode} in questa scheda sintetica: non trasmettere senza una diversa autorizzazione esplicita.`;
+  const list=document.createElement('div');list.className='plan-segments';
+  list.replaceChildren(...segments.map(segment=>{const card=document.createElement('article');card.className='plan-segment';const freq=document.createElement('strong');freq.textContent=segment.from===segment.to?`${formatFrequency(segment.from)} MHz`:`${formatFrequency(segment.from)}–${formatFrequency(segment.to)} MHz`;const desc=document.createElement('span');desc.textContent=segment.label;const modes=document.createElement('small');modes.textContent=`Modi: ${segment.modes.join(', ')}`;card.append(freq,desc,modes);return card;}));
+  const source=document.createElement('p');source.className='hint';source.textContent=BAND_PLAN_SOURCE;
+  box.replaceChildren(title,legal,note,list,source);
+}
+function openBandPlan(){appView='bandplan';$('home').hidden=true;$('qso-tool').hidden=true;$('iac-tool').hidden=true;$('bandplan-tool').hidden=false;renderBandPlan();window.scrollTo({top:0,behavior:'smooth'});updateBackButton();}
 $('open-tools').addEventListener('click',openTools);
 $('close-tools').addEventListener('click',closeTools);
 $('open-cards').addEventListener('click',openCards);
 $('close-cards').addEventListener('click',closeCards);
 $('open-iac').addEventListener('click',openIac);
+$('open-bandplan').addEventListener('click',openBandPlan);
 $('close-iac').addEventListener('click',openHome);
+$('close-bandplan').addEventListener('click',openHome);
+$('plan-band').addEventListener('change',renderBandPlan);
+$('plan-mode').addEventListener('change',renderBandPlan);
 $('open-qso').addEventListener('click',openQso);
 $('home-back').addEventListener('click',openHome);
 for(const tab of ['list','create']) {

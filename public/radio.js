@@ -1,15 +1,45 @@
-// Frequency ranges are an application allowlist based on IARU Region 1.
-// They do not certify an operator's national privileges or permitted modes/power.
+// Frequency ranges are an Italian allowlist based on MIMIT PNRF (Piano Nazionale di Ripartizione delle Frequenze) plus IARU Region 1 band-plan guidance for sub-bands/modes.
+// They do not certify an operator's licence class, permitted power, local authorisations, experiments or channel availability.
 export const BANDS = [
-  ['2200',135700,137800], ['630',472000,479000], ['160',1810000,2000000],
+  ['2200',135700,137800], ['630',472000,479000], ['160',1830000,1850000],
   ['80',3500000,3800000], ['60',5351500,5366500], ['40',7000000,7200000],
   ['30',10100000,10150000], ['20',14000000,14350000], ['17',18068000,18168000],
   ['15',21000000,21450000], ['12',24890000,24990000], ['10',28000000,29700000],
-  ['6',50000000,52000000], ['4',70000000,70500000], ['2',144000000,146000000],
-  ['0.70',430000000,440000000], ['0.23',1240000000,1300000000],
-  ['0.13',2300000000,2450000000]
+  ['6',50000000,52000000], ['2',144000000,146000000], ['0.70',430000000,438000000],
+  ['0.23',1240000000,1300000000], ['0.13',2300000000,2450000000]
 ];
 export const MODES = ['CW','Fonia','SSB','FM','AM','FT8','FT4','RTTY','PSK31','JS8','D-Star','DMR','C4FM','SSTV'];
+const DIGITAL=['FT8','FT4','RTTY','PSK31','JS8'];
+const DV=['D-Star','DMR','C4FM'];
+const CW_DIG=['CW',...DIGITAL];
+const SSB=['Fonia','SSB','AM'];
+const FMDV=['FM','Fonia',...DV];
+export const BAND_PLAN_SOURCE = 'MIMIT PNRF: https://www.mimit.gov.it/it/digitale/gestione-spettro-radio/piano-nazionale-ripartizione-frequenze';
+export const BAND_PLAN = [
+  {band:'2200',name:'2200 m · LF',range:'135,7–137,8 kHz',notes:'PNRF Italia: servizio di radioamatore in statuto secondario; nota di potenza tipica 1 W e.i.r.p. Verificare le Note MIMIT.',segments:[{from:135700,to:137800,modes:CW_DIG,label:'CW e modi digitali stretti'}]},
+  {band:'630',name:'630 m · MF',range:'472–479 kHz',notes:'PNRF Italia: statuto secondario; limite indicativo 1 W e.i.r.p. e protezione dei servizi primari secondo Note MIMIT.',segments:[{from:472000,to:479000,modes:CW_DIG,label:'CW e modi digitali stretti'}]},
+  {band:'160',name:'160 m',range:'1,830–1,850 MHz',notes:'PNRF ordinario Italia: 1830–1850 kHz. La porzione 1810–1830 kHz è da trattare solo se coperta da sperimentazioni/autorizzazioni MIMIT vigenti.',segments:[{from:1830000,to:1840000,modes:CW_DIG,label:'CW e modi digitali stretti'},{from:1840000,to:1850000,modes:SSB,label:'Fonia SSB/AM secondo band plan'}]},
+  {band:'80',name:'80 m',range:'3,500–3,800 MHz',notes:'PNRF Italia: banda radioamatoriale 3500–3800 kHz.',segments:[{from:3500000,to:3600000,modes:CW_DIG,label:'CW e modi digitali'},{from:3600000,to:3800000,modes:SSB,label:'Fonia, prevalentemente LSB'}]},
+  {band:'60',name:'60 m',range:'5,3515–5,3665 MHz',notes:'PNRF Italia: canale/banda soggetta a condizioni e Note MIMIT; usare USB e larghezze compatibili.',segments:[{from:5351500,to:5354000,modes:CW_DIG,label:'CW e modi stretti'},{from:5354000,to:5366500,modes:['Fonia','SSB',...DIGITAL],label:'Tutti i modi stretti, USB raccomandata'}]},
+  {band:'40',name:'40 m',range:'7,000–7,200 MHz',notes:'PNRF Italia: banda radioamatoriale 7000–7200 kHz.',segments:[{from:7000000,to:7050000,modes:CW_DIG,label:'CW e modi digitali'},{from:7050000,to:7200000,modes:SSB,label:'Fonia, prevalentemente LSB'}]},
+  {band:'30',name:'30 m',range:'10,100–10,150 MHz',notes:'PNRF Italia: banda radioamatoriale 10100–10150 kHz; band plan IARU: uso CW/digitale stretto, niente fonia.',segments:[{from:10100000,to:10150000,modes:CW_DIG,label:'CW e modi digitali stretti; niente fonia SSB'}]},
+  {band:'20',name:'20 m',range:'14,000–14,350 MHz',notes:'PNRF Italia: banda radioamatoriale 14000–14350 kHz.',segments:[{from:14000000,to:14112000,modes:CW_DIG,label:'CW, beacon e modi digitali'},{from:14112000,to:14350000,modes:[...SSB,'SSTV'],label:'Fonia, prevalentemente USB, e immagini'}]},
+  {band:'17',name:'17 m',range:'18,068–18,168 MHz',notes:'PNRF Italia: banda radioamatoriale 18068–18168 kHz.',segments:[{from:18068000,to:18120000,modes:CW_DIG,label:'CW, beacon e modi digitali'},{from:18120000,to:18168000,modes:['Fonia','SSB'],label:'Fonia USB'}]},
+  {band:'15',name:'15 m',range:'21,000–21,450 MHz',notes:'PNRF Italia: banda radioamatoriale 21000–21450 kHz.',segments:[{from:21000000,to:21151000,modes:CW_DIG,label:'CW, beacon e modi digitali'},{from:21151000,to:21450000,modes:[...SSB,'SSTV'],label:'Fonia USB e immagini'}]},
+  {band:'12',name:'12 m',range:'24,890–24,990 MHz',notes:'PNRF Italia: banda radioamatoriale 24890–24990 kHz.',segments:[{from:24890000,to:24940000,modes:CW_DIG,label:'CW, beacon e modi digitali'},{from:24940000,to:24990000,modes:['Fonia','SSB'],label:'Fonia USB'}]},
+  {band:'10',name:'10 m',range:'28,000–29,700 MHz',notes:'PNRF Italia: banda radioamatoriale 28,000–29,700 MHz.',segments:[{from:28000000,to:28300000,modes:CW_DIG,label:'CW, beacon e modi digitali'},{from:28300000,to:29000000,modes:[...SSB,'SSTV'],label:'Fonia USB/AM e immagini'},{from:29100000,to:29200000,modes:FMDV,label:'FM/DV simplex'},{from:29600000,to:29600000,modes:['FM','Fonia'],label:'Chiamata FM'},{from:29620000,to:29700000,modes:FMDV,label:'FM/DV ripetitori'}]},
+  {band:'6',name:'6 m',range:'50–52 MHz',notes:'PNRF Italia: 50,000–52,000 MHz con Note 7A, 56, 57; non interferire né chiedere protezione verso i wind profiler.',segments:[{from:50000000,to:50100000,modes:['CW'],label:'CW e beacon'},{from:50100000,to:50300000,modes:['Fonia','SSB','CW'],label:'SSB/CW weak signal'},{from:50300000,to:50500000,modes:DIGITAL,label:'MGM/digitale'},{from:50700000,to:50900000,modes:FMDV,label:'FM/DV e ripetitori'}]},
+  {band:'4',name:'4 m',range:'70 MHz',notes:'PNRF Italia: non attribuita stabilmente al servizio di radioamatore. Usabile solo con specifica sperimentazione/autorizzazione MIMIT vigente, quindi non abilitata per SPOT ordinari.',segments:[]},
+  {band:'2',name:'2 m',range:'144–146 MHz',notes:'PNRF Italia nota 69: 144,0–145,8 MHz radioamatore; 145,8–146,0 MHz radioamatore via satellite.',segments:[{from:144025000,to:144400000,modes:['CW','Fonia','SSB',...DIGITAL],label:'CW/SSB/MGM weak signal; 144,300 SSB'},{from:144800000,to:144800000,modes:DIGITAL,label:'APRS'},{from:145000000,to:145800000,modes:FMDV,label:'FM/DV simplex e ripetitori; 145,500 chiamata'},{from:145806000,to:146000000,modes:FMDV,label:'Satellite'}]},
+  {band:'0.70',name:'70 cm',range:'430–438 MHz',notes:'PNRF Italia: porzioni radioamatoriali 430–438 MHz con co-attribuzioni/condizioni; 438–440 MHz non indicata per radioamatori nella Tabella B corrente.',segments:[{from:432000000,to:432400000,modes:['CW','Fonia','SSB',...DIGITAL],label:'All mode weak signal; 432,200 SSB'},{from:433000000,to:435000000,modes:FMDV,label:'FM/DV simplex e ripetitori; 433,500 chiamata'},{from:435000000,to:438000000,modes:[...FMDV,...DIGITAL],label:'Satellite, DATV e dati secondo Note'}]},
+  {band:'0.23',name:'23 cm',range:'1240–1300 MHz',notes:'PNRF Italia: banda con co-attribuzioni e Note; verificare limitazioni applicabili e protezione dei servizi primari.',segments:[{from:1296000000,to:1296400000,modes:['CW','Fonia','SSB',...DIGITAL],label:'All mode weak signal; 1296,200 SSB'},{from:1297000000,to:1298000000,modes:FMDV,label:'FM/DV'}]},
+  {band:'0.13',name:'13 cm',range:'2300–2450 MHz',notes:'PNRF Italia: uso radioamatoriale soggetto a co-attribuzioni e Note MIMIT; verificare porzione e condizioni prima di trasmettere.',segments:[{from:2320000000,to:2320400000,modes:['CW','Fonia','SSB',...DIGITAL],label:'All mode weak signal; 2320,200 SSB'},{from:2322000000,to:2324000000,modes:FMDV,label:'FM/DV e dati'}]}
+];
+export function bandPlanMatches(band, mode) {
+  const plan = BAND_PLAN.find(item => item.band === band);
+  if (!plan) return [];
+  return plan.segments.filter(segment => !mode || segment.modes.includes(mode));
+}
 export function locatorFromGPS(latitude, longitude) {
   if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) throw new Error('Posizione GPS non valida.');
   const x = Math.min(longitude + 180, 360 - 1e-9);
