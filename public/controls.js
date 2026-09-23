@@ -1,8 +1,14 @@
-import { BANDS, formatFrequency } from './radio.js';
+import { BANDS, EXCLUDED_RANGES, formatFrequency, isFrequencyAllowed } from './radio.js';
 
 export function stepFrequency(hz, place, direction, band) {
   const next = hz + direction * 10 ** place;
-  return Number.isSafeInteger(next) && next >= band[1] && next <= band[2] ? next : hz;
+  if (!Number.isSafeInteger(next) || next < band[1] || next > band[2]) return hz;
+  if (isFrequencyAllowed(band[0], next)) return next;
+  const gap=EXCLUDED_RANGES.find(range=>range.band===band[0] && next>=range.from && next<range.to);
+  if(!gap)return hz;
+  // Skip the entire gap, not just one digit step inside it.
+  const edge=direction>0 ? gap.to : gap.from-1;
+  return isFrequencyAllowed(band[0],edge) ? edge : hz;
 }
 
 export function frequencyControl(root, input, getBand) {

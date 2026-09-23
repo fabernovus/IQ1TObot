@@ -1,4 +1,4 @@
-import { BANDS, MODES, BAND_PLAN, bandPlanMatches, locatorFromGPS, locatorCenter, validateSpot, validateProfile, validateQSL, formatFrequency, formatUtcLogDate, bearingBetween, distanceBetween } from './radio.js';
+import { BANDS, MODES, BAND_PLAN, EXCLUDED_RANGES, bandPlanMatches, locatorFromGPS, locatorCenter, validateSpot, validateProfile, validateQSL, formatFrequency, formatUtcLogDate, bearingBetween, distanceBetween } from './radio.js';
 import { bandControl, frequencyControl } from './controls.js';
 import { preciseGPS } from './gps.js';
 const $ = id => document.getElementById(id);
@@ -33,7 +33,8 @@ let planView='browse';
 const frequency=frequencyControl($('frequency-control'),$('frequency'),()=>BANDS.find(b=>b[0]===$('band').value));
 function bandHint() {
   const b = BANDS.find(b=>b[0]===$('band').value);
-  $('frequency-hint').textContent=`Da ${formatFrequency(b[1])} a ${formatFrequency(b[2])} MHz`;
+  const exclusions=EXCLUDED_RANGES.filter(range=>range.band===b[0]).map(range=>range.label);
+  $('frequency-hint').textContent=`Limiti esterni: ${formatFrequency(b[1])}–${formatFrequency(b[2])} MHz${exclusions.length?` · ${exclusions.join('; ')}`:''}. L’intera emissione deve restare nella porzione consentita.`;
   frequency.setBand();
 }
 const bandWheel=bandControl($('band-wheel'),$('band'),bandHint,()=>authenticated && !busy);
