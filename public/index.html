@@ -19,17 +19,37 @@
     <div class="launcher-grid" aria-label="Cartelle">
       <button id="open-tools" type="button" class="folder-icon" aria-controls="tools-folder">
         <span class="folder-preview" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
-        <span>Tools</span>
+        <span>Strumenti</span>
+      </button>
+      <button id="open-cards" type="button" class="folder-icon" aria-controls="cards-folder">
+        <span class="folder-preview cards-preview" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+        <span>Schede rapide</span>
       </button>
     </div>
     <section id="tools-folder" class="folder-panel" aria-labelledby="tools-title" hidden>
-      <div class="section-head"><h2 id="tools-title">Tools</h2><button id="close-tools" type="button" class="text-button">Chiudi</button></div>
-      <div class="launcher-grid tools-grid" aria-label="Tools disponibili">
+      <div class="section-head"><h2 id="tools-title">Strumenti</h2><button id="close-tools" type="button" class="text-button">Chiudi</button></div>
+      <div class="launcher-grid tools-grid" aria-label="Strumenti disponibili">
         <button id="open-qso" type="button" class="app-icon">
           <span class="app-symbol" aria-hidden="true">📡</span>
           <span>QSO Spot</span>
         </button>
       </div>
+    </section>
+    <section id="cards-folder" class="folder-panel" aria-labelledby="cards-title" hidden>
+      <div class="section-head"><h2 id="cards-title">Schede rapide</h2><button id="close-cards" type="button" class="text-button">Chiudi</button></div>
+      <div class="launcher-grid tools-grid" aria-label="Schede disponibili">
+        <button id="open-iac" type="button" class="app-icon">
+          <span class="app-symbol card-symbol" aria-hidden="true">📅</span>
+          <span>Calendario IAC</span>
+        </button>
+      </div>
+      <article id="iac-card" class="info-card" hidden aria-labelledby="iac-title">
+        <div class="section-head"><h2 id="iac-title">IAC · Italian Activity Contest</h2><button id="close-iac" type="button" class="text-button">Chiudi</button></div>
+        <p id="iac-updated" class="hint"></p>
+        <div id="iac-next" class="next-event"></div>
+        <div class="table-scroll"><table class="qsl-table"><caption>Prossime tornate</caption><thead><tr><th>Tornata</th><th>Frequenze</th><th>Regola</th><th>Prossima data</th></tr></thead><tbody id="iac-rows"></tbody></table></div>
+        <p class="hint">Le date sono calcolate sul dispositivo, quindi la scheda funziona anche offline.</p>
+      </article>
     </section>
   </section>
   <section id="qso-tool" hidden aria-label="QSO Spot">

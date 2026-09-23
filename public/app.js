@@ -43,9 +43,11 @@ function dmrChoice() {
 $('mode').addEventListener('change',dmrChoice);$('dmr-type').addEventListener('change',dmrChoice);dmrChoice();
 function updateBackButton() { if(appView==='qso')tg?.BackButton?.show?.();else tg?.BackButton?.hide?.(); }
 function closeTools() {$('tools-folder').hidden=true;}
-function openTools() {$('tools-folder').hidden=false;}
+function openTools() {$('cards-folder').hidden=true;$('iac-card').hidden=true;$('tools-folder').hidden=false;}
+function closeCards() {$('cards-folder').hidden=true;$('iac-card').hidden=true;}
+function openCards() {$('tools-folder').hidden=true;$('cards-folder').hidden=false;}
 function openHome() {
-  appView='home';detailView='';$('home').hidden=false;$('qso-tool').hidden=true;closeTools();renderDetail('');window.scrollTo({top:0,behavior:'smooth'});updateBackButton();
+  appView='home';detailView='';$('home').hidden=false;$('qso-tool').hidden=true;closeTools();closeCards();renderDetail('');window.scrollTo({top:0,behavior:'smooth'});updateBackButton();
 }
 function openQso() {
   appView='qso';$('home').hidden=true;$('qso-tool').hidden=false;updateBackButton();requestAnimationFrame(()=>bandWheel.reveal());
@@ -72,8 +74,33 @@ function detailBack() {if(detailView){if(history.state?.cqDetail)history.back();
 history.replaceState({...history.state,cqDetail:''},'');
 window.addEventListener('popstate',event=>renderDetail(event.state?.cqDetail || ''));
 tg?.BackButton?.onClick?.(detailBack);
+const IAC_RULES=[
+  {round:1,frequency:'50',weekday:4,nth:2,rule:'2° Giovedì'},
+  {round:2,frequency:'144',weekday:2,nth:1,rule:'1° Martedì'},
+  {round:3,frequency:'432',weekday:2,nth:2,rule:'2° Martedì'},
+  {round:4,frequency:'1296',weekday:2,nth:3,rule:'3° Martedì'},
+  {round:5,frequency:'2300 & Up',weekday:2,nth:4,rule:'4° Martedì'},
+  {round:6,frequency:'70',weekday:4,nth:3,rule:'3° Giovedì'}
+];
+const dateFmt=new Intl.DateTimeFormat('it-IT',{weekday:'short',day:'2-digit',month:'long',year:'numeric'});
+function nthWeekday(year,month,weekday,nth){const date=new Date(year,month,1);date.setDate(1+((weekday-date.getDay()+7)%7)+(nth-1)*7);return date;}
+function nextIacDate(rule,today=new Date()){
+  const base=new Date(today.getFullYear(),today.getMonth(),today.getDate());
+  for(let offset=0;offset<24;offset++){const date=nthWeekday(base.getFullYear(),base.getMonth()+offset,rule.weekday,rule.nth);if(date>=base)return date;}
+}
+function renderIacCard(){
+  const today=new Date(),items=IAC_RULES.map(rule=>({...rule,date:nextIacDate(rule,today)})).sort((a,b)=>a.date-b.date || a.round-b.round),next=items[0];
+  $('iac-updated').textContent=`Calcolato il ${dateFmt.format(today)} dalla data del dispositivo.`;
+  $('iac-next').innerHTML=`<strong>Prossima tornata: ${next.frequency} MHz</strong><span>Tornata ${next.round} · ${next.rule} · ${dateFmt.format(next.date)}</span>`;
+  $('iac-rows').replaceChildren(...items.map((item,index)=>{const row=document.createElement('tr');if(index===0)row.className='iac-current';for(const value of [item.round,item.frequency,item.rule,dateFmt.format(item.date)]){const cell=document.createElement('td');cell.textContent=value;row.append(cell);}return row;}));
+}
+function openIac(){renderIacCard();$('iac-card').hidden=false;$('iac-card').scrollIntoView({behavior:'smooth',block:'start'});}
 $('open-tools').addEventListener('click',openTools);
 $('close-tools').addEventListener('click',closeTools);
+$('open-cards').addEventListener('click',openCards);
+$('close-cards').addEventListener('click',closeCards);
+$('open-iac').addEventListener('click',openIac);
+$('close-iac').addEventListener('click',()=>{$('iac-card').hidden=true;});
 $('open-qso').addEventListener('click',openQso);
 $('home-back').addEventListener('click',openHome);
 for(const tab of ['list','create']) {
