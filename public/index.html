@@ -50,13 +50,23 @@
     </section>
   </section>
   <section id="bandplan-tool" hidden aria-label="Band plan radioamatoriale">
-    <div class="section-head tool-head"><h2 id="bandplan-title">Band plan · modi e frequenze</h2><button id="close-bandplan" type="button" class="home-button"><span class="home-mark" aria-hidden="true"></span>Dashboard</button></div>
-    <section class="panel">
-      <p class="hint">Indicazioni basate su MIMIT PNRF e relative Note, con sottobande/modi da band plan IARU Region 1: scegli lunghezza d’onda e modo per vedere dove puoi orientarti. Verifica sempre licenza, autorizzazioni nazionali, potenza e occupazione del canale.</p>
-      <div class="row"><label>Lunghezza d’onda / banda<select id="plan-band"></select></label><label>Modo<select id="plan-mode"></select></label></div>
-      <div id="plan-result" class="plan-result" role="status"></div>
-      <p class="hint">Fonte normativa: MIMIT PNRF, Tabelle e Note. Le sottobande per modo sono una guida operativa IARU. In HF convenzione laterale: LSB sotto 10 MHz, USB sopra 10 MHz; 60 m USB.</p>
+    <div class="section-head tool-head plan-header"><div><span class="eyebrow">Schede rapide · Italia</span><h2 id="bandplan-title">Band plan</h2></div><button id="close-bandplan" type="button" class="home-button"><span class="home-mark" aria-hidden="true"></span>Dashboard</button></div>
+    <p class="hint">Esplora la distribuzione di una banda oppure cerca le finestre per un modo specifico.</p>
+    <section class="panel plan-filters" aria-label="Filtri band plan">
+      <div class="plan-view-switch" role="group" aria-label="Tipo di consultazione"><button id="plan-browse" type="button" aria-pressed="true">Esplora banda</button><button id="plan-search" type="button" aria-pressed="false">Cerca per modo</button></div>
+      <div class="plan-filter-grid"><label for="plan-band">Banda · lunghezza d’onda<select id="plan-band"></select></label><label id="plan-mode-field" for="plan-mode" hidden>Modo di emissione<select id="plan-mode"><option value="">Tutti i modi</option></select></label></div>
+      <p id="plan-help" class="hint">Tutte le finestre in ordine di frequenza. Tocca un modo per approfondire.</p>
     </section>
+    <p id="plan-summary" class="hint" role="status" aria-live="polite" aria-atomic="true"></p>
+    <div id="plan-result" class="plan-result"></div>
+    <aside class="plan-guidance" aria-label="Avvertenze e fonti">
+      <p class="hint">Guida orientativa, non autorizzazione a trasmettere. Verifica licenza, potenza, larghezza di banda e canale libero.</p>
+      <details><summary>Come leggere il band plan e fonti</summary>
+        <p class="hint">Il PNRF MIMIT e le relative Note definiscono le attribuzioni italiane. Le sottobande per modo seguono le indicazioni operative IARU. Le frequenze mostrate non sono una verifica dell’intera emissione: anche le bande laterali devono rientrare nei limiti.</p>
+        <p class="hint">Convenzione HF: LSB sotto 10 MHz, USB sopra 10 MHz; sui 60 m USB.</p>
+        <div class="plan-sources"><a href="https://www.mimit.gov.it/it/digitale/gestione-spettro-radio/piano-nazionale-ripartizione-frequenze" target="_blank" rel="noopener noreferrer">MIMIT · PNRF, Tabelle e Note ↗</a><a href="https://www.iaru-r1.org/on-the-air/band-plans/" target="_blank" rel="noopener noreferrer">IARU Region 1 · Band plans ↗</a></div>
+      </details>
+    </aside>
   </section>
   <section id="qso-tool" hidden aria-label="QSO Spot">
   <div class="section-head tool-head"><h2>QSO Spot</h2><button id="home-back" type="button" class="home-button"><span class="home-mark" aria-hidden="true"></span>Dashboard</button></div>

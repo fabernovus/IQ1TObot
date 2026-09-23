@@ -1,4 +1,4 @@
-import { BANDS, MODES, BAND_PLAN, BAND_PLAN_SOURCE, bandPlanMatches, locatorFromGPS, locatorCenter, validateSpot, validateProfile, validateQSL, formatFrequency, formatUtcLogDate, bearingBetween, distanceBetween } from './radio.js';
+import { BANDS, MODES, BAND_PLAN, bandPlanMatches, locatorFromGPS, locatorCenter, validateSpot, validateProfile, validateQSL, formatFrequency, formatUtcLogDate, bearingBetween, distanceBetween } from './radio.js';
 import { bandControl, frequencyControl } from './controls.js';
 import { preciseGPS } from './gps.js';
 const $ = id => document.getElementById(id);
@@ -28,7 +28,8 @@ for (const mode of MODES) $('mode').add(new Option(mode,mode));
 for (const plan of BAND_PLAN) $('plan-band').add(new Option(plan.name,plan.band));
 for (const mode of MODES) $('plan-mode').add(new Option(mode,mode));
 $('band').value = '40'; $('mode').value = 'Fonia';
-$('plan-band').value = '40'; $('plan-mode').value = 'SSB';
+$('plan-band').value = '2'; $('plan-mode').value = 'Fonia';
+let planView='browse';
 const frequency=frequencyControl($('frequency-control'),$('frequency'),()=>BANDS.find(b=>b[0]===$('band').value));
 function bandHint() {
   const b = BANDS.find(b=>b[0]===$('band').value);
@@ -98,16 +99,76 @@ function renderIacCard(){
   $('iac-rows').replaceChildren(...items.map((item,index)=>{const row=document.createElement('tr');if(index===0)row.className='iac-current';for(const value of [item.round,item.frequency,item.rule,dateFmt.format(item.date)]){const cell=document.createElement('td');cell.textContent=value;row.append(cell);}return row;}));
 }
 function openIac(){appView='iac';$('home').hidden=true;$('qso-tool').hidden=true;$('iac-tool').hidden=false;$('bandplan-tool').hidden=true;renderIacCard();window.scrollTo({top:0,behavior:'smooth'});updateBackButton();}
+function setPlanView(view){
+  planView=view;
+  $('plan-browse').setAttribute('aria-pressed',String(view==='browse'));
+  $('plan-search').setAttribute('aria-pressed',String(view==='search'));
+  $('plan-mode-field').hidden=view==='browse';
+  $('plan-help').textContent=view==='browse'?'Tutte le finestre in ordine di frequenza. Tocca un modo per approfondire.':'Scegli banda e modo. Fonia comprende più tipi di emissione: leggi le etichette delle finestre.';
+  renderBandPlan();
+}
 function renderBandPlan(){
-  const plan=BAND_PLAN.find(item=>item.band===$('plan-band').value),mode=$('plan-mode').value,segments=bandPlanMatches(plan?.band,mode),box=$('plan-result');
-  if(!plan){box.textContent='Banda non trovata.';return;}
-  const title=document.createElement('h3');title.textContent=`${plan.name} · ${plan.range}`;
-  const legal=document.createElement('p');legal.className='plan-note';legal.textContent=plan.notes;
-  const note=document.createElement('p');note.className='hint';note.textContent=segments.length?`Finestre consigliate per ${mode}.`:`Nessuna finestra specifica per ${mode} in questa scheda sintetica: non trasmettere senza una diversa autorizzazione esplicita.`;
-  const list=document.createElement('div');list.className='plan-segments';
-  list.replaceChildren(...segments.map(segment=>{const card=document.createElement('article');card.className='plan-segment';const freq=document.createElement('strong');freq.textContent=segment.from===segment.to?`${formatFrequency(segment.from)} MHz`:`${formatFrequency(segment.from)}–${formatFrequency(segment.to)} MHz`;const desc=document.createElement('span');desc.textContent=segment.label;const modes=document.createElement('small');modes.textContent=`Modi: ${segment.modes.join(', ')}`;card.append(freq,desc,modes);return card;}));
-  const source=document.createElement('p');source.className='hint';source.textContent=BAND_PLAN_SOURCE;
-  box.replaceChildren(title,legal,note,list,source);
+  const plan=BAND_PLAN.find(item=>item.band===$('plan-band').value),mode=planView==='browse'?'':$('plan-mode').value,segments=bandPlanMatches(plan?.band,mode).slice().sort((a,b)=>a.from-b.from),box=$('plan-result');
+  if(!plan){box.replaceChildren();$('plan-summary').textContent='Banda non trovata.';return;}
+  const element=(tag,className,text)=>{const node=document.createElement(tag);node.className=className;if(text)node.textContent=text;return node;};
+  $('plan-summary').textContent=`${plan.name} · ${mode || 'Tutti i modi'} · ${segments.length} ${segments.length===1?'risultato':'risultati'}`;
+  const heading=element('div','plan-band-heading');
+  heading.append(element('h3','',plan.name),element('span','plan-band-range',plan.range));
+  const legal=element('aside','plan-note');
+  legal.append(element('strong','','Note per l’Italia'),element('p','',plan.notes));
+  const overview=element('section','plan-overview');
+  const band=BANDS.find(item=>item[0]===plan.band);
+  if(band && plan.segments.length){
+    overview.append(element('h4','','Distribuzione nella banda'),element('p','hint','Barre in scala sulla banda completa; ogni riga è una finestra della scheda. Gli spazi vuoti sono porzioni non dettagliate, non frequenze libere.'));
+    const axis=element('div','plan-axis');
+    axis.append(element('span','',`${formatFrequency(band[1]).replace('.',',')} MHz`),element('span','',`${formatFrequency(band[2]).replace('.',',')} MHz`));overview.append(axis);
+    for(const segment of plan.segments.slice().sort((a,b)=>a.from-b.from)){
+      const row=element('div','plan-spectrum-row');
+      if(mode && !segment.modes.includes(mode))row.classList.add('plan-unmatched');
+      row.append(element('span','plan-spectrum-label',segment.label));
+      const track=element('div','plan-spectrum-track');track.setAttribute('aria-hidden','true');
+      const bar=element('span','plan-spectrum-bar');
+      bar.style.left=`${100*(segment.from-band[1])/(band[2]-band[1])}%`;
+      bar.style.width=`${100*(segment.to-segment.from)/(band[2]-band[1])}%`;
+      track.append(bar);row.append(track);
+      row.append(element('small','',`${formatFrequency(segment.from).replace('.',',')}${segment.to===segment.from?'':`–${formatFrequency(segment.to).replace('.',',')}`} MHz · ${segment.modes.join(' / ')}`));
+      overview.append(row);
+    }
+    if(mode)overview.append(element('p','hint','Le finestre attenuate non corrispondono al modo selezionato.'));
+  }else overview.hidden=true;
+  const list=element('div','plan-segments');
+  for(const segment of segments){
+    const card=element('article','plan-segment');
+    const single=segment.from===segment.to;
+    card.append(element('h4','',segment.label));
+    const frequencies=element('dl',`plan-frequencies${single?' plan-single':''}`);
+    for(const [label,hz] of single?[['Frequenza',segment.from]]:[['Da',segment.from],['A',segment.to]]){
+      const cell=element('div','');
+      const value=element('dd','');
+      value.append(element('strong','',formatFrequency(hz).replace('.',',')),element('span','','MHz'));
+      cell.append(element('dt','',label),value);frequencies.append(cell);
+    }
+    const modes=element('ul','plan-modes');modes.setAttribute('aria-label','Modi indicati');
+    for(const item of segment.modes){
+      const chip=element('li',item===mode?'is-selected':'');
+      const button=element('button','',item);button.type='button';
+      button.setAttribute('aria-label',`Cerca ${item} sulla banda ${plan.name}`);
+      button.setAttribute('aria-pressed',String(item===mode));
+      button.addEventListener('click',()=>{$('plan-mode').value=item;setPlanView('search');$('plan-mode').focus();});
+      chip.append(button);modes.append(chip);
+    }
+    card.append(frequencies,modes);list.append(card);
+  }
+  if(!segments.length){
+    const empty=element('div','plan-empty');
+    empty.append(element('h4','','Nessuna finestra in questa scheda'),element('p','hint','La mancanza di risultati non determina da sola un divieto o un’autorizzazione. Consulta le note della banda e le fonti.'));
+    if(mode && plan.segments.length){
+      const reset=element('button','secondary','Mostra tutti i modi');reset.type='button';
+      reset.addEventListener('click',()=>{setPlanView('browse');$('plan-browse').focus();});empty.append(reset);
+    }
+    list.append(empty);
+  }
+  box.replaceChildren(heading,legal,overview,list);
 }
 function openBandPlan(){appView='bandplan';$('home').hidden=true;$('qso-tool').hidden=true;$('iac-tool').hidden=true;$('bandplan-tool').hidden=false;renderBandPlan();window.scrollTo({top:0,behavior:'smooth'});updateBackButton();}
 $('open-tools').addEventListener('click',openTools);
@@ -118,6 +179,8 @@ $('open-iac').addEventListener('click',openIac);
 $('open-bandplan').addEventListener('click',openBandPlan);
 $('close-iac').addEventListener('click',openHome);
 $('close-bandplan').addEventListener('click',openHome);
+$('plan-browse').addEventListener('click',()=>setPlanView('browse'));
+$('plan-search').addEventListener('click',()=>setPlanView('search'));
 $('plan-band').addEventListener('change',renderBandPlan);
 $('plan-mode').addEventListener('change',renderBandPlan);
 $('open-qso').addEventListener('click',openQso);
