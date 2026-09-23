@@ -41,16 +41,16 @@ function dmrChoice() {
   if(!$('radio-fields').hidden)requestAnimationFrame(()=>bandWheel.reveal());
 }
 $('mode').addEventListener('change',dmrChoice);$('dmr-type').addEventListener('change',dmrChoice);dmrChoice();
-function updateBackButton() { if(appView==='qso')tg?.BackButton?.show?.();else tg?.BackButton?.hide?.(); }
+function updateBackButton() { if(appView!=='home')tg?.BackButton?.show?.();else tg?.BackButton?.hide?.(); }
 function closeTools() {$('tools-folder').hidden=true;}
-function openTools() {$('cards-folder').hidden=true;$('iac-card').hidden=true;$('tools-folder').hidden=false;}
-function closeCards() {$('cards-folder').hidden=true;$('iac-card').hidden=true;}
+function openTools() {$('cards-folder').hidden=true;$('tools-folder').hidden=false;}
+function closeCards() {$('cards-folder').hidden=true;}
 function openCards() {$('tools-folder').hidden=true;$('cards-folder').hidden=false;}
 function openHome() {
-  appView='home';detailView='';$('home').hidden=false;$('qso-tool').hidden=true;closeTools();closeCards();renderDetail('');window.scrollTo({top:0,behavior:'smooth'});updateBackButton();
+  appView='home';detailView='';$('home').hidden=false;$('qso-tool').hidden=true;$('iac-tool').hidden=true;closeTools();closeCards();renderDetail('');window.scrollTo({top:0,behavior:'smooth'});updateBackButton();
 }
 function openQso() {
-  appView='qso';$('home').hidden=true;$('qso-tool').hidden=false;updateBackButton();requestAnimationFrame(()=>bandWheel.reveal());
+  appView='qso';$('home').hidden=true;$('qso-tool').hidden=false;$('iac-tool').hidden=true;updateBackButton();requestAnimationFrame(()=>bandWheel.reveal());
 }
 function selectTab(name,focus=false) {
   selectedTab=name;detailView='';$('main-tabs').hidden=false;$('spots-section').hidden=false;$('bearing-panel').hidden=true;$('qsl-panel').hidden=true;updateBackButton();
@@ -94,13 +94,13 @@ function renderIacCard(){
   $('iac-next').innerHTML=`<strong>Prossima tornata: ${next.frequency} MHz</strong><span>Tornata ${next.round} · ${next.rule} · ${dateFmt.format(next.date)}</span>`;
   $('iac-rows').replaceChildren(...items.map((item,index)=>{const row=document.createElement('tr');if(index===0)row.className='iac-current';for(const value of [item.round,item.frequency,item.rule,dateFmt.format(item.date)]){const cell=document.createElement('td');cell.textContent=value;row.append(cell);}return row;}));
 }
-function openIac(){renderIacCard();$('iac-card').hidden=false;$('iac-card').scrollIntoView({behavior:'smooth',block:'start'});}
+function openIac(){appView='iac';$('home').hidden=true;$('qso-tool').hidden=true;$('iac-tool').hidden=false;renderIacCard();window.scrollTo({top:0,behavior:'smooth'});updateBackButton();}
 $('open-tools').addEventListener('click',openTools);
 $('close-tools').addEventListener('click',closeTools);
 $('open-cards').addEventListener('click',openCards);
 $('close-cards').addEventListener('click',closeCards);
 $('open-iac').addEventListener('click',openIac);
-$('close-iac').addEventListener('click',()=>{$('iac-card').hidden=true;});
+$('close-iac').addEventListener('click',openHome);
 $('open-qso').addEventListener('click',openQso);
 $('home-back').addEventListener('click',openHome);
 for(const tab of ['list','create']) {
@@ -153,8 +153,8 @@ function card(spot,own=false) {
   el.append(top,freq,meta);
   if(spot.activity) {const tag=document.createElement('p');tag.className='hint';tag.textContent=`${spot.activity} · ${spot.activity_name}`;el.append(tag);}
   if(spot.notes){const note=document.createElement('p');note.className='spot-notes';note.textContent=spot.notes;el.append(note);}
-  if(!own && spot.frequency_hz>0) {const button=document.createElement('button');button.type='button';button.className='text-button';button.textContent='🧭 Direzione antenna';button.addEventListener('click',()=>showBearing(spot.locator,spot.callsign,spot.id));el.append(button);}
-  const logButton=document.createElement('button');logButton.type='button';logButton.className='text-button';logButton.textContent=`📒 QSL Log (${spot.qsl_count || 0})${own?'':' · Conferma QSO'}`;
+  if(!own && spot.frequency_hz>0) {const button=document.createElement('button');button.type='button';button.className='text-button';button.textContent='⌖ Direzione antenna';button.addEventListener('click',()=>showBearing(spot.locator,spot.callsign,spot.id));el.append(button);}
+  const logButton=document.createElement('button');logButton.type='button';logButton.className='text-button';logButton.textContent=`QSL Log (${spot.qsl_count || 0})${own?'':' · Conferma QSO'}`;
   logButton.addEventListener('click',()=>openQSL(spot.id));el.append(logButton);
   if(own){const qrt=document.createElement('button');qrt.type='button';qrt.className='danger';qrt.dataset.qrt=spot.id;qrt.textContent='QRT · Termina questo SPOT';qrt.addEventListener('click',()=>endSpot(spot.id));el.append(qrt);const remove=document.createElement('button');remove.type='button';remove.className='danger text-button';remove.textContent='Elimina SPOT e messaggio';remove.addEventListener('click',()=>deleteSpot(spot.id));el.append(remove);}
   return el;
